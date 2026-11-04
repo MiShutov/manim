@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "manim-schematics"
+version = "0.1.0"
+description = "Reusable Manim components for ML/LLM diagrams"
+requires-python = ">=3.10"
+dependencies = [
+    "manim>=0.22,<0.23",
+    "numpy>=1.24",
+]
+
+[tool.setuptools.packages.find]
+include = ["schematics*", "scenes*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

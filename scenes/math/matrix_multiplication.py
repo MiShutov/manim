@@ -1,11 +1,15 @@
+"""Step-by-step visualization of matrix multiplication."""
 
-from manim import *
 import numpy as np
+from manim import *
 
 
 class MatrixMultiplication(Scene):
+    """Show how each output element is a dot product of a row and a column."""
+
     def construct(self):
-        # Исходные матрицы
+        """Build the matrices and animate the dot products one by one."""
+        # Input matrices.
         A = np.array([
             [1, 2, 3],
             [4, 5, 6]
@@ -19,7 +23,7 @@ class MatrixMultiplication(Scene):
 
         C = A @ B
 
-        # Заголовок
+        # Title.
         title = Text(
             "Matrix multiplication",
             font_size=34
@@ -27,14 +31,14 @@ class MatrixMultiplication(Scene):
 
         self.play(Write(title))
 
-        # Создаём визуальные матрицы
+        # Create the visual matrices.
         mat_A = Matrix(A.tolist()).scale(0.75)
         mat_B = Matrix(B.tolist()).scale(0.75)
         mat_C = Matrix(
             [["?", "?"], ["?", "?"]]
         ).scale(0.75)
 
-        # Расположение
+        # Layout.
         mat_A.move_to(LEFT * 4.2 + UP * 0.5)
         mat_B.move_to(UP * 0.5)
         mat_C.move_to(RIGHT * 4.2 + UP * 0.5)
@@ -61,12 +65,12 @@ class MatrixMultiplication(Scene):
             Write(equals)
         )
 
-        # Получаем отдельные элементы
+        # Access individual matrix entries.
         a_entries = mat_A.get_entries()
         b_entries = mat_B.get_entries()
         c_entries = mat_C.get_entries()
 
-        # Объяснение
+        # Explanation caption.
         explanation = Text(
             "Each element is a dot product",
             font_size=25
@@ -74,22 +78,22 @@ class MatrixMultiplication(Scene):
 
         self.play(Write(explanation))
 
-        # Вычисляем каждый элемент C
+        # Compute every element of C.
         for i in range(2):
             for j in range(2):
 
-                # Индексы строки и столбца
+                # Row and column indices for this output element.
                 row = [i * 3 + k for k in range(3)]
                 col = [k * 2 + j for k in range(3)]
 
-                # Подсвечиваем строку A
+                # Highlight the row of A.
                 row_box = SurroundingRectangle(
                     VGroup(*[a_entries[x] for x in row]),
                     color=YELLOW,
                     buff=0.12
                 )
 
-                # Подсвечиваем столбец B
+                # Highlight the column of B.
                 col_box = SurroundingRectangle(
                     VGroup(*[b_entries[x] for x in col]),
                     color=BLUE,
@@ -102,7 +106,7 @@ class MatrixMultiplication(Scene):
                     run_time=0.7
                 )
 
-                # Поэлементное перемножение
+                # Element-wise multiplication.
                 products = []
 
                 for k in range(3):
@@ -118,7 +122,7 @@ class MatrixMultiplication(Scene):
                         run_time=0.5
                     )
 
-                # Формула скалярного произведения
+                # Dot-product formula.
                 formula = MathTex(
                     " + ".join(products),
                     "=",
@@ -131,7 +135,7 @@ class MatrixMultiplication(Scene):
                 self.play(Write(formula))
                 self.wait(0.5)
 
-                # Записываем результат в C
+                # Write the result into C.
                 result = MathTex(
                     str(C[i, j])
                 ).move_to(c_entries[i * 2 + j])
@@ -153,7 +157,7 @@ class MatrixMultiplication(Scene):
                     FadeOut(formula)
                 )
 
-        # Финальный результат
+        # Final result.
         final_text = Text(
             "Matrix multiplication completed!",
             font_size=26,
