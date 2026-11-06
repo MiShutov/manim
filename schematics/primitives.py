@@ -12,6 +12,7 @@ from manim import (
     DOWN,
     FadeIn,
     LEFT,
+    MathTex,
     Mobject,
     PI,
     RoundedRectangle,
@@ -27,12 +28,12 @@ from schematics.theme import Theme
 
 
 class Node(VGroup):
-    """Rounded rectangle with a centered text label.
+    """Rounded rectangle with a centered label.
 
     Attributes:
         spec: The ``NodeSpec`` used to build this node.
         rect: Background ``RoundedRectangle``.
-        label: ``Text`` label inside the rectangle.
+        label: ``Text`` or ``MathTex`` label inside the rectangle.
     """
 
     def __init__(
@@ -57,10 +58,18 @@ class Node(VGroup):
             fill_opacity=theme.node_fill_opacity,
         )
 
-        self.label = Text(
-            spec.label,
-            font_size=theme.size("node"),
-            font=theme.font,
+        self.label = (
+            MathTex(
+                spec.label,
+                font_size=theme.size(spec.label_size),
+                color=theme.color("text"),
+            )
+            if spec.label_tex
+            else Text(
+                spec.label,
+                font_size=theme.size(spec.label_size),
+                font=theme.font,
+            )
         )
         if self.label.width > width - 0.3:
             self.label.scale_to_fit_width(width - 0.3)
@@ -70,14 +79,16 @@ class Node(VGroup):
 
 
 class Badge(VGroup):
-    """Compact two-line label for a tensor shape.
+    """Compact two-line block for a tensor name and its shape.
 
-    Used for the strip of tensor shapes above a detailed diagram.
+    Badges are used both for graph blocks and for strips of tensor shapes.
+    A badge can mix plain text and LaTeX and can recolor selected title
+    substrings, which keeps learned weights visually distinct.
 
     Attributes:
         spec: Source ``BadgeSpec``.
         rect: Rounded background rectangle.
-        title_label: First line with the short name.
+        title_label: First line with the short name or formula.
         shape_label: Second line with the tensor shape.
     """
 
@@ -92,20 +103,43 @@ class Badge(VGroup):
         """Build a badge from ``spec`` using theme colors and font sizes."""
         self.spec = spec
         color = theme.color(spec.color)
+        shape_color = theme.color(spec.shape_color or spec.color)
 
-        self.title_label = Text(
-            spec.title,
-            font_size=theme.size("badge_title"),
-            font=theme.font,
-            weight=BOLD,
-            color=theme.color("text"),
-        )
-        self.shape_label = Text(
-            spec.shape,
-            font_size=theme.size("badge_shape"),
-            font=theme.mono_font,
-            color=color,
-        )
+        if spec.title_tex:
+            highlight_keys = [substring for substring, _ in spec.title_highlights]
+            math_kwargs = {
+                "font_size": theme.size(spec.title_size),
+                "color": theme.color("text"),
+            }
+            if highlight_keys:
+                math_kwargs["substrings_to_isolate"] = highlight_keys
+            self.title_label = MathTex(spec.title, **math_kwargs)
+            for substring, color_key in spec.title_highlights:
+                self.title_label.set_color_by_tex(
+                    substring, theme.color(color_key)
+                )
+        else:
+            self.title_label = Text(
+                spec.title,
+                font_size=theme.size(spec.title_size),
+                font=theme.font,
+                weight=BOLD,
+                color=theme.color("text"),
+            )
+
+        if spec.shape_tex:
+            self.shape_label = MathTex(
+                spec.shape,
+                font_size=theme.size("badge_shape"),
+                color=shape_color,
+            )
+        else:
+            self.shape_label = Text(
+                spec.shape,
+                font_size=theme.size("badge_shape"),
+                font=theme.mono_font,
+                color=shape_color,
+            )
 
         pad = 0.16
         if width is None:
@@ -176,6 +210,57 @@ class SkipConnection(VGroup):
     def reveal(self):
         """Return animations that draw the path and its arrow head."""
         return [Create(self.path), FadeIn(self.tip)]
+
+
+def route_arrow(
+    points: Sequence[np.ndarray],
+    theme: Theme,
+    *,
+    color_key: str = "muted",
+    stroke_width: float | None = None,
+    tip_length: float = 0.11,
+) -> VGroup:
+    """Return an orthogonal polyline arrow through ``points``.
+
+    Unlike :func:`connect`, this helper accepts an explicit route. Use it
+    when a straight arrow would cross another block, for example when a
+    value tensor has to travel around the attention core.
+
+    Args:
+        points: Polyline vertices from source to destination.
+        theme: Theme supplying arrow color and stroke width.
+        color_key: Semantic color key for the path.
+        stroke_width: Optional override for the line width.
+        tip_length: Length of the arrow head.
+    """
+    if len(points) < 2:
+        raise ValueError("route_arrow needs at least two points")
+
+    color = theme.color(color_key)
+    vertices = [np.asarray(point, dtype=float) for point in points]
+    path = VMobject(
+        color=color,
+        stroke_width=theme.arrow_stroke if stroke_width is None else stroke_width,
+    )
+    path.set_points_as_corners(vertices)
+
+    tip = Triangle(
+        fill_color=color,
+        fill_opacity=1.0,
+        stroke_width=0,
+    ).scale_to_fit_height(tip_length)
+    direction = vertices[-1] - vertices[-2]
+    length = float(np.linalg.norm(direction))
+    if length < 1e-9:
+        raise ValueError("the last two route points must differ")
+    unit = direction / length
+    tip.rotate(np.arctan2(unit[1], unit[0]) - PI / 2)
+    extent = (
+        abs(unit[0]) * tip.width / 2 + abs(unit[1]) * tip.height / 2
+    )
+    tip.move_to(vertices[-1] - unit * extent)
+
+    return VGroup(path, tip)
 
 
 def connect(

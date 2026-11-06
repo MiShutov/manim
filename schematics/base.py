@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 
-from manim import BOLD, Scene, Text, register_font
+from manim import BOLD, MathTex, Scene, Text, register_font
 
 from schematics.theme import DARK, FONT_DIR, Theme
 
@@ -38,11 +38,18 @@ class SchematicScene(Scene):
         self._font_stack.close()
         super().tear_down()
 
-    def title(self, text: str, *, x: float = -0.75, y: float = 3.68):
+    def title(
+        self,
+        text: str,
+        *,
+        x: float = -0.75,
+        y: float = 3.68,
+        size: str = "title",
+    ):
         """Create the standard diagram title centered at ``(x, y)``."""
         return Text(
             text,
-            font_size=self.theme.size("title"),
+            font_size=self.theme.size(size),
             font=self.theme.font,
             weight=BOLD,
         ).move_to([x, y, 0])
@@ -65,5 +72,25 @@ class SchematicScene(Scene):
             text,
             font_size=self.theme.size(size),
             font=self.theme.font,
+            color=self.theme.color(color_key),
+        ).move_to([x, y, 0])
+
+    def math_caption(
+        self,
+        tex: str,
+        *,
+        x: float,
+        y: float,
+        color_key: str = "muted",
+        size: str = "small",
+    ):
+        """Create a LaTeX caption centered at ``(x, y)``.
+
+        Use this for any label with subscripts or mathematical operators so
+        indices such as ``d_k`` always stay in LaTeX.
+        """
+        return MathTex(
+            tex,
+            font_size=self.theme.size(size),
             color=self.theme.color(color_key),
         ).move_to([x, y, 0])

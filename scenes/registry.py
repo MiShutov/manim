@@ -3,6 +3,10 @@
 from schematics.specs import SceneSpec
 from scenes.math.matrix_multiplication import MatrixMultiplication
 from scenes.transformer.basic_attention.basic_attention import ClassicalAttention
+from scenes.transformer.model_anatomy.model_anatomy import TransformerLLM
+from scenes.transformer.positional_encoding.positional_encoding import (
+    RotaryPositionalEncoding,
+)
 from scenes.transformer.transformer_block.transformer_block import LlamaBlock
 from scenes.transformer.tokens.tokens import TokenAnatomy
 
@@ -12,8 +16,25 @@ SCENES: dict[str, SceneSpec] = {
         key="attention",
         path="scenes/transformer/basic_attention/basic_attention.py",
         cls=ClassicalAttention,
-        title="Classical multi-head attention",
-        tags=("llm", "transformer", "attention"),
+        title="Original multi-head attention",
+        tags=("transformer", "attention", "multi-head"),
+    ),
+    "positional_encoding": SceneSpec(
+        key="positional_encoding",
+        path=(
+            "scenes/transformer/positional_encoding/"
+            "positional_encoding.py"
+        ),
+        cls=RotaryPositionalEncoding,
+        title="Rotary positional encoding (RoPE)",
+        tags=("transformer", "attention", "positional-encoding", "rope"),
+    ),
+    "model_anatomy": SceneSpec(
+        key="model_anatomy",
+        path="scenes/transformer/model_anatomy/model_anatomy.py",
+        cls=TransformerLLM,
+        title="Inside a transformer LLM",
+        tags=("llm", "transformer", "architecture", "embeddings"),
     ),
     "llama_block": SceneSpec(
         key="transformer_block",

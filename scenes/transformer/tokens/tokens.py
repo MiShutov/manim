@@ -11,7 +11,9 @@ Run with:
 
 from __future__ import annotations
 
+import numpy as np
 from manim import (
+    Arrow,
     DOWN,
     RIGHT,
     Create,
@@ -21,6 +23,7 @@ from manim import (
     LaggedStart,
     Line,
     MathTex,
+    RoundedRectangle,
     Text,
     VGroup,
     Write,
@@ -72,14 +75,16 @@ class TokenAnatomy(SchematicScene):
         )
 
         # --- Text flow (upper) --------------------------------------------
+        # The row is laid out from the measured widths of its stages, so the
+        # elements never overlap: phrase -> tokens -> ids -> lookup -> matrix.
+        text_row_y = 2.15
+        text_gap = 0.44
+
         phrase = Text(
             TEXT_PROMPT,
-            font_size=22,
+            font_size=15,
             font=theme.font,
             color=theme.color("text"),
-        ).move_to([-5.60, 2.15, 0])
-        text_stage = self.caption(
-            "TEXT", x=-5.60, y=3.00, color_key="key", size="caption"
         )
 
         chips = VGroup(
@@ -88,16 +93,11 @@ class TokenAnatomy(SchematicScene):
                     piece,
                     theme,
                     color_key="score" if index in SUBWORD_INDICES else "key",
+                    pad=0.12,
                 )
                 for index, piece in enumerate(TOKEN_PIECES)
             ]
-        ).arrange(RIGHT, buff=0.08).move_to([-2.45, 2.15, 0])
-        tokenize_stage = self.caption(
-            "TOKENIZATION", x=-2.45, y=3.00, color_key="key", size="caption"
-        )
-        subword_caption = self.caption(
-            "sleeping → sleep + ing", x=-2.45, y=1.72, color_key="score"
-        )
+        ).arrange(RIGHT, buff=0.08)
 
         id_chips = VGroup(
             *[
@@ -106,29 +106,31 @@ class TokenAnatomy(SchematicScene):
                     theme,
                     color_key="muted",
                     height=0.30,
-                    pad=0.10,
+                    pad=0.07,
                     mono=True,
                     size="small",
                 )
                 for token_id in TOKEN_IDS
             ]
-        ).arrange(RIGHT, buff=0.06).move_to([0.85, 2.15, 0])
-        ids_stage = self.caption(
-            "TOKEN IDS", x=0.85, y=3.00, color_key="muted", size="caption"
-        )
+        ).arrange(RIGHT, buff=0.06)
 
-        lookup = MatrixGrid(
-            len(TOKEN_PIECES),
-            EMBED_DIM,
-            theme,
-            cell=0.16,
-            gap=0.03,
-            color_key="key",
-            row_labels=TOKEN_IDS,
-        ).move_to([3.30, 2.15, 0])
-        lookup_stage = self.caption(
-            "EMBEDDING LOOKUP", x=3.30, y=3.00, color_key="key", size="caption"
+        # Lookup as a function of the token id: a purple node whose label is
+        # the LaTeX formula x_i = Embedding(id_i).
+        lookup_rect = RoundedRectangle(
+            width=1.7,
+            height=0.62,
+            corner_radius=theme.node_radius,
+            stroke_color=theme.color("attention"),
+            stroke_width=theme.node_stroke,
+            fill_color=theme.color("attention"),
+            fill_opacity=theme.node_fill_opacity,
         )
+        lookup_formula = MathTex(
+            r"x_i = \mathrm{Embedding}(\mathrm{id}_i)",
+            font_size=theme.size("caption"),
+            color=theme.color("text"),
+        ).move_to(lookup_rect.get_center())
+        lookup = VGroup(lookup_rect, lookup_formula)
 
         x_text = MatrixGrid(
             len(TOKEN_PIECES),
@@ -137,23 +139,76 @@ class TokenAnatomy(SchematicScene):
             cell=0.16,
             gap=0.03,
             color_key="value",
-        ).move_to([5.45, 2.15, 0])
+        )
+
+        # Distribute the stages over the full width with equal gaps.
+        text_row = (phrase, chips, id_chips, lookup, x_text)
+        row_width = sum(item.width for item in text_row) + text_gap * (
+            len(text_row) - 1
+        )
+        cursor = -row_width / 2.0
+        for item in text_row:
+            item.move_to([cursor + item.width / 2.0, text_row_y, 0])
+            cursor += item.width + text_gap
+
+        text_stage = self.caption(
+            "TEXT",
+            x=phrase.get_center()[0],
+            y=3.00,
+            color_key="key",
+            size="caption",
+        )
+        tokenization_stage = self.caption(
+            "tokenization",
+            x=chips.get_center()[0],
+            y=1.72,
+            color_key="key",
+            size="caption",
+        )
+        ids_stage = self.caption(
+            "TOKEN IDS",
+            x=id_chips.get_center()[0],
+            y=3.00,
+            color_key="muted",
+            size="caption",
+        )
+        embedding_lookup_stage = self.caption(
+            "embedding lookup",
+            x=lookup.get_center()[0],
+            y=1.48,
+            color_key="attention",
+            size="caption",
+        )
         text_emb_stage = self.caption(
-            "EMBEDDINGS", x=5.45, y=3.00, color_key="value", size="caption"
+            "EMBEDDINGS",
+            x=x_text.get_center()[0],
+            y=3.00,
+            color_key="value",
+            size="caption",
         )
 
         text_formula = MathTex(
             TEXT_FORMULA,
             font_size=theme.size("outro"),
             color=theme.color("value"),
-        ).move_to([4.45, 1.30, 0])
-        if text_formula.width > 3.8:
-            text_formula.scale_to_fit_width(3.8)
+        )
+        # Keep the formula narrow enough to clear the "embedding lookup"
+        # caption standing to its left.
+        if text_formula.width > 1.4:
+            text_formula.scale_to_fit_width(1.4)
+        text_formula.move_to([x_text.get_center()[0], 1.47, 0])
+        # d — embedding dimension, kept clear of the divider line below.
+        d_caption = self.caption(
+            "d — embedding dimension",
+            x=x_text.get_center()[0],
+            y=1.16,
+            color_key="muted",
+        )
 
-        text_arrow1 = connect(phrase, chips, theme, buff=0.14)
-        text_arrow2 = connect(chips, id_chips, theme, buff=0.14)
-        text_arrow3 = connect(id_chips, lookup, theme, buff=0.14)
-        text_arrow4 = connect(lookup, x_text, theme, buff=0.14)
+        text_arrow1 = connect(phrase, chips, theme, buff=0.08, tip_length=0.10)
+        text_arrow2 = connect(chips, id_chips, theme, buff=0.08, tip_length=0.10)
+        text_arrow3 = connect(id_chips, lookup, theme, buff=0.08, tip_length=0.10)
+        text_arrow4 = connect(lookup, x_text, theme, buff=0.08, tip_length=0.10)
 
         # --- Image flow (lower) -------------------------------------------
         image = PatchGrid(
@@ -173,7 +228,7 @@ class TokenAnatomy(SchematicScene):
             "PATCHES", x=-2.70, y=0.45, color_key="key", size="caption"
         )
         image_emb_stage = self.caption(
-            "EMBEDDINGS", x=2.05, y=0.45, color_key="key", size="caption"
+            "EMBEDDINGS", x=2.60, y=0.45, color_key="key", size="caption"
         )
 
         patch_target = 0.24
@@ -192,12 +247,26 @@ class TokenAnatomy(SchematicScene):
             for index in range(IMAGE_TOKENS)
         ]
 
-        projection = Node(
-            NodeSpec("Linear Projection", "", "", "attention", 1),
-            theme,
-            width=1.75,
+        # Vectorization as a function of one patch: a purple node whose label
+        # is the LaTeX formula x_i = vectorize(patch_i).
+        vectorization_rect = RoundedRectangle(
+            width=2.0,
             height=0.62,
-        ).move_to([-0.15, -0.35, 0])
+            corner_radius=theme.node_radius,
+            stroke_color=theme.color("attention"),
+            stroke_width=theme.node_stroke,
+            fill_color=theme.color("attention"),
+            fill_opacity=theme.node_fill_opacity,
+        ).move_to([0.60, -0.35, 0])
+        vectorization_formula = MathTex(
+            r"x_i = \mathrm{vectorize}(\mathrm{patch}_i)",
+            font_size=theme.size("caption"),
+            color=theme.color("text"),
+        ).move_to(vectorization_rect.get_center())
+        vectorization = VGroup(vectorization_rect, vectorization_formula)
+        vectorization_stage = self.caption(
+            "vectorization", x=0.60, y=-1.05, color_key="attention", size="caption"
+        )
 
         x_image = MatrixGrid(
             IMAGE_TOKENS,
@@ -206,33 +275,57 @@ class TokenAnatomy(SchematicScene):
             cell=0.11,
             gap=0.02,
             color_key="key",
-        ).move_to([2.05, -0.35, 0])
+        ).move_to([2.60, -0.35, 0])
 
         image_formula = MathTex(
             IMAGE_FORMULA,
             font_size=theme.size("outro"),
             color=theme.color("key"),
-        ).move_to([2.05, -1.15, 0])
+        ).move_to([2.60, -1.15, 0])
         if image_formula.width > 4.6:
             image_formula.scale_to_fit_width(4.6)
 
-        patch_caption = self.caption(
-            "one patch → one token vector", x=-2.70, y=-0.98
+        patchification_stage = self.caption(
+            "patchification", x=-2.70, y=-0.98, color_key="key", size="caption"
         )
 
-        image_arrow1 = connect(image, patch_row, theme, buff=0.14)
-        image_arrow2 = connect(patch_row, projection, theme, buff=0.14)
-        image_arrow3 = connect(projection, x_image, theme, buff=0.14)
+        # Arrow from the image to the patch row ("to the patches"). It runs
+        # through the gap between the image and the row so it never crosses
+        # the patches themselves.
+        patch_row_left = first_x - patch_target / 2
+        patch_row_right = (
+            first_x + (IMAGE_TOKENS - 1) * (patch_target + patch_gap)
+            + patch_target / 2
+        )
+        image_arrow1 = Arrow(
+            image.get_right(),
+            np.array([patch_row_left - 0.05, -0.35, 0]),
+            buff=0.10,
+            stroke_width=theme.arrow_stroke,
+            color=theme.color("muted"),
+            tip_length=0.10,
+            max_tip_length_to_length_ratio=0.25,
+        )
+        # Arrow from the patch row to vectorization ("from the patches").
+        image_arrow2 = Arrow(
+            np.array([patch_row_right + 0.05, -0.35, 0]),
+            np.array([vectorization.get_left()[0] - 0.05, -0.35, 0]),
+            buff=0.10,
+            stroke_width=theme.arrow_stroke,
+            color=theme.color("muted"),
+            tip_length=0.10,
+            max_tip_length_to_length_ratio=0.25,
+        )
+        image_arrow3 = connect(vectorization, x_image, theme, buff=0.14, tip_length=0.11)
 
         # --- Convergence --------------------------------------------------
+        # Final composition is centered on the screen: labels on top, matrices
+        # below them, then the two token streams entering the Transformer.
         text_caption = self.caption(
-            "text tokens · N_text × d", x=-1.60, y=-1.15, color_key="value"
+            "text tokens · N_text × d", x=-1.60, y=1.25, color_key="value"
         )
         image_caption = self.caption(
-            "image tokens · N_image × d", x=1.60, y=-1.15, color_key="key"
-        )
-        same_d = self.caption(
-            "same embedding size d", x=0.0, y=-1.85
+            "image tokens · N_image × d", x=1.60, y=1.25, color_key="key"
         )
 
         transformer = Node(
@@ -240,7 +333,7 @@ class TokenAnatomy(SchematicScene):
             theme,
             width=4.00,
             height=0.50,
-        ).move_to([0.0, -2.95, 0])
+        ).move_to([0.0, -1.15, 0])
 
         # --- Animation ----------------------------------------------------
         self.play(FadeIn(title, shift=DOWN * 0.2), FadeIn(divider), run_time=0.8)
@@ -261,7 +354,7 @@ class TokenAnatomy(SchematicScene):
                 lag_ratio=0.12,
             ),
             Create(text_arrow1),
-            FadeIn(tokenize_stage),
+            FadeIn(tokenization_stage),
             run_time=1.0,
         )
         self.play(
@@ -275,7 +368,6 @@ class TokenAnatomy(SchematicScene):
                 color=theme.color("score"),
                 scale_factor=1.08,
             ),
-            FadeIn(subword_caption),
             run_time=0.8,
         )
         self.play(
@@ -290,20 +382,14 @@ class TokenAnatomy(SchematicScene):
         self.play(
             FadeIn(lookup, shift=RIGHT * 0.1),
             Create(text_arrow3),
-            FadeIn(lookup_stage),
+            FadeIn(embedding_lookup_stage),
             run_time=0.8,
         )
         self.play(
-            LaggedStart(
-                *[
-                    Indicate(
-                        lookup.row(index),
-                        color=theme.color("key"),
-                        scale_factor=1.04,
-                    )
-                    for index in range(len(TOKEN_PIECES))
-                ],
-                lag_ratio=0.15,
+            Indicate(
+                lookup,
+                color=theme.color("attention"),
+                scale_factor=1.08,
             ),
             run_time=1.2,
         )
@@ -311,6 +397,9 @@ class TokenAnatomy(SchematicScene):
             FadeIn(x_text, shift=RIGHT * 0.1),
             Create(text_arrow4),
             FadeIn(text_emb_stage),
+            # The dimension d is explained the moment the green text
+            # embeddings first appear.
+            FadeIn(d_caption),
             run_time=0.8,
         )
         self.play(Write(text_formula), run_time=0.7)
@@ -335,12 +424,13 @@ class TokenAnatomy(SchematicScene):
         self.play(
             Create(image_arrow1),
             FadeIn(patches_stage),
-            FadeIn(patch_caption),
+            FadeIn(patchification_stage),
             run_time=0.6,
         )
         self.play(
-            FadeIn(projection, shift=RIGHT * 0.1),
+            FadeIn(vectorization, shift=RIGHT * 0.1),
             Create(image_arrow2),
+            FadeIn(vectorization_stage),
             run_time=0.7,
         )
         self.play(
@@ -369,30 +459,32 @@ class TokenAnatomy(SchematicScene):
             run_time=0.9,
         )
 
-        # Clear the two flows, keeping only the embedding matrices.
+        # Clear the two flows, keeping only the embedding matrices. The divider
+        # goes away too: it only separated the two modality rows.
         cleanup = [
+            divider,
             image,
             image_stage,
             patch_row,
             patches_stage,
-            patch_caption,
+            patchification_stage,
             image_arrow1,
-            projection,
+            vectorization,
+            vectorization_stage,
             image_arrow2,
             image_arrow3,
             image_emb_stage,
+            embedding_lookup_stage,
             image_formula,
             phrase,
             text_stage,
             chips,
-            tokenize_stage,
-            subword_caption,
+            tokenization_stage,
             text_arrow1,
             id_chips,
             ids_stage,
             text_arrow2,
             lookup,
-            lookup_stage,
             text_arrow3,
             text_emb_stage,
             text_arrow4,
@@ -400,15 +492,15 @@ class TokenAnatomy(SchematicScene):
         ]
         self.play(
             *[FadeOut(mobject, shift=DOWN * 0.08) for mobject in cleanup],
-            x_image.animate.move_to([1.60, -1.85, 0]),
-            x_text.animate.move_to([-1.60, -1.85, 0]),
+            x_image.animate.move_to([1.60, 0.40, 0]),
+            x_text.animate.move_to([-1.60, 0.40, 0]),
+            d_caption.animate.move_to([0.0, -0.45, 0]),
             run_time=1.2,
             rate_func=smooth,
         )
         self.play(
             FadeIn(image_caption),
             FadeIn(text_caption),
-            FadeIn(same_d),
             run_time=0.6,
         )
 
@@ -417,16 +509,18 @@ class TokenAnatomy(SchematicScene):
             transformer,
             theme,
             color_key="key",
-            buff=0.04,
+            buff=0.10,
             direction="vertical",
+            tip_length=0.12,
         )
         conv_arrow_text = connect(
             x_text,
             transformer,
             theme,
             color_key="value",
-            buff=0.04,
+            buff=0.10,
             direction="vertical",
+            tip_length=0.12,
         )
         self.play(
             FadeIn(transformer, shift=DOWN * 0.1),

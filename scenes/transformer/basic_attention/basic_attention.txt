@@ -1,0 +1,109 @@
+СЦЕНА: Multi-head attention
+ФАЙЛ: scenes/transformer/basic_attention/basic_attention.py
+КЛЮЧ: python scripts/render.py basic_attention -q l
+
+ЦЕЛЬ
+-----
+Показать causal attention из статьи "Attention Is All You Need" как явный
+граф вычислений: input -> Q/K/V -> RoPE только для Q и K -> scaled
+dot-product attention с causal mask -> concat -> output projection.
+
+ВИЗУАЛЬНАЯ ГРАММАТИКА
+---------------------
+- Фиолетовый (compute): блоки вычислений.
+- Фиолетовый (complexity): подписи вычислительной сложности O(...).
+- Зелёный (activation): активации, вход, выходы, Q/K/V, attn_weights,
+  attn_output.
+- Зелёный (dimension): размерности тензоров внутри блоков.
+- Жёлтый (weights): обучаемые матрицы весов W_Q, W_K, W_V, W_O.
+- Белый (text): causal-mask callout, рамка вокруг Q/K/V и подписи
+  "split into h heads" / "heads merged".
+- Стрелки: нейтрально-серые, одинаковая толщина и одинаковый наконечник.
+- Легенда обозначений: слева, чтобы не занимать вертикаль над графом.
+
+МАТЕМАТИЧЕСКИЕ ОБОЗНАЧЕНИЯ
+--------------------------
+- Матричное умножение: @ (в LaTeX: \mathbin{@}).
+- Все индексы и нижние индексы только в LaTeX: d_k, d_model, W_Q, M_ij.
+- attn_weights — результат softmax и активация, поэтому зелёный.
+- W — обучаемые параметры, поэтому жёлтый.
+- M — causal mask, не обучаемый параметр, поэтому белый; значения 0 и
+  -\infty в формуле и легенде окрашены зелёным и серым соответственно.
+- В легенде: B (batch), S (sequence), h (heads), d_model (hidden),
+  d_k = d_v (head dim), PE (RoPE для Q и K), @ (matrix product),
+  W (learned weights).
+
+ДАННЫЕ
+------
+B = batch size, S = sequence length.
+d_model = 512, h = 8, d_k = d_v = 64.
+Формы:
+  input / output / проекции: (B, S, d_model)
+  Q/K/V после разбиения на головы: (B, h, S, d_k)
+  causal mask M: (1, 1, S, S), broadcast по B и h
+  attn_weights: (B, h, S, S)
+  attn_output: (B, h, S, d_k)
+Сложности:
+  Q/K/V proj:  O(B·S·d_model^2)
+  RoPE:        O(B·S·d_model)
+  scores:      O(B·S^2·d_model)
+  softmax:     O(B·h·S^2)
+  concat:      O(B·S·d_model)
+  W_O:         O(B·S·d_model^2)
+
+РАСКАДРОВКА
+-----------
+1. Появление маленького заголовка "Multi-head attention" и легенды Notation
+   слева.
+2. Появляется зелёный блок "input x" с формой (B, S, d_model).
+3. От боковых граней input x расходятся три стрелки к Q/K/V проекциям.
+4. Появляются фиолетовые блоки Q = x @ W_Q, K = x @ W_K, V = x @ W_V.
+   W_Q/W_K/W_V внутри заголовков жёлтые; формы зелёные; стоимости
+   фиолетовые справа.
+5. Стрелки вниз к зелёным активациям queries Q, keys K, values V.
+   Шрифт заголовков зелёных карточек меньше, чем у вычислительных блоков.
+   Вокруг всех трёх карточек рисуется тонкая белая рамка, справа
+   появляется белая подпись "split into h heads": активации разделены
+   на h голов. Стрелки останавливаются на рамке, а не пересекают её.
+6. Сразу после Q/K/V слева появляется формула
+   head_i = softmax(Q_i @ K_i^T / sqrt(d_k) + M) @ V_i. Стрелки от
+   формулы к attn_output нет.
+7. Q и K проходят через RoPE-блоки Q = PE(Q) и K = PE(K). V остаётся
+   без позиционного кодирования.
+8. Q и K после RoPE входят в блок
+   attn_weights = Q @ K^T / sqrt(d_k).
+9. attn_weights = softmax(attn_weights + M, dim=-1). Справа от core
+   появляется callout "causal mask M":
+   - форма (1, 1, S, S);
+   - формула M_ij = 0 при j <= i и -\infty при j > i (знак бесконечности);
+   - маленькая сетка 5x5: зелёные клетки на диагонали и ниже (0,
+     разрешено), серые клетки выше диагонали (-\infty, запрещено);
+   - оси i (строки, запросы) и j (столбцы, ключи);
+   - легенда 0 / -\infty;
+   - серая пометка "broadcast over B, h".
+   Сетка появляется построчно. Callout стоит правее вертикального пути V,
+   поэтому не перекрывает стрелку.
+10. attn_output = attn_weights @ V.
+11. attention_output = concat_heads(attention_output) -> блок с формой
+    (B, S, d_model). Справа появляется белая надпись "heads merged" с
+    зелёной формой (B, S, d_model): размерности голов больше нет.
+12. output = attention_output @ W_O -> зелёный output.
+13. Внизу появляются итоговая сложность и ссылка на статью.
+
+ОГРАНИЧЕНИЯ
+-----------
+- Не писать "same shape as input".
+- Не использовать d_k / d_model / W_Q / M_ij простым текстом.
+- Не красить блоки в цвета, не входящие в семантическую палитру.
+- Не переносить легенду обратно наверх.
+- В concat использовать concat_heads(attention_output): имя функции явно
+  указывает, что конкатенация идёт по осям голов.
+- Белая рамка вокруг Q/K/V — одна общая, а не три отдельные.
+- Не соединять формулу head_i стрелкой с attn_output.
+- Callout маски не должен пересекаться с маршрутом V.
+
+ПРОВЕРКА
+---------
+1. python scripts/render.py basic_attention --still
+2. pytest -q
+3. python scripts/render.py basic_attention -q l

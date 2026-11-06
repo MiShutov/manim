@@ -14,10 +14,15 @@ FONT_DIR = REPO_ROOT / "assets" / "fonts"
 def _colors() -> dict[str, str]:
     """Return the default semantic color palette."""
     return {
-        "input": "#8B949E",
+        # Canonical semantic colors for new diagrams.
+        "compute": "#B07CFF",
+        "activation": "#5CD65C",
+        "dimension": "#5CD65C",
+        "complexity": "#B07CFF",
+        "weights": "#FFE45C",
+        # Shared base colors.
+        "input": "#5CD65C",
         "norm": "#58C4DD",
-        "attention": "#B07CFF",
-        "ffn": "#5CD65C",
         "residual": "#FF9F1C",
         "signal": "#FFE45C",
         "text": "#F0F6FC",
@@ -25,12 +30,15 @@ def _colors() -> dict[str, str]:
         "panel": "#151B23",
         "border": "#30363D",
         "success": "#3FB950",
+        # Legacy per-tensor keys kept for existing diagrams.
+        "attention": "#B07CFF",
+        "ffn": "#5CD65C",
         "query": "#B07CFF",
         "key": "#58C4DD",
         "value": "#5CD65C",
         "score": "#FF9F1C",
         "weight": "#FFE45C",
-        "output": "#3FB950",
+        "output": "#5CD65C",
     }
 
 
@@ -38,6 +46,7 @@ def _sizes() -> dict[str, float]:
     """Return the default font-size scale."""
     return {
         "title": 40,
+        "title_small": 26,
         "outro": 22,
         "node": 21,
         "hud_title": 24,
@@ -51,6 +60,7 @@ def _sizes() -> dict[str, float]:
         "small": 13,
         "badge_title": 17,
         "badge_shape": 13,
+        "card_title": 15,
     }
 
 

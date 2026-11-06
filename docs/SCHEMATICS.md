@@ -8,10 +8,50 @@ in `schematics/`; scene files under `scenes/` should stay thin.
 1. `AGENTS.md` - project rules.
 2. `docs/SCHEMATICS.md` - this guide.
 3. `schematics/__init__.py` - public API surface.
-4. `scenes/llm/llama_block.py` - reference pipeline scene.
-5. `scenes/llm/attention.py` - reference tensor-detail scene.
-6. `scenes/llm/token_anatomy.py` - reference multimodal/tokenization scene.
-7. `scenes/llm/specs.py` - reference node data.
+4. `scenes/transformer/transformer_block/transformer_block.py` - reference pipeline scene.
+5. `scenes/transformer/basic_attention/basic_attention.py` - reference computation-graph scene.
+6. `scenes/transformer/tokens/tokens.py` - reference multimodal/tokenization scene.
+7. `scenes/transformer/basic_attention/specs.py` - reference node data.
+8. `scenes/transformer/positional_encoding/positional_encoding.py` -
+   reference rotation scene with `RotationDial` and `PairStrip`.
+
+## Visual and notation rules
+
+These rules apply to every diagram, not only to the attention scene.
+
+### Color grammar
+
+- Purple (`compute`, `complexity`): computation blocks, operations, and
+  asymptotic cost labels.
+- Green (`activation`, `dimension`): activations, inputs, outputs, tensor
+  shapes, and dimension symbols.
+- Yellow (`weights`): learned parameter matrices such as `W_Q`, `W_K`, `W_V`,
+  `W_O`.
+- The softmax output is an activation, not a learned parameter. Name it
+  `attn_weights` (or `A` in compact diagrams) and color it green.
+- Prefer the semantic keys above. The older per-tensor keys (`query`, `key`,
+  `value`, `score`, `weight`) remain for existing scenes, but new diagrams
+  should use `compute`, `activation`, `dimension`, `complexity`, and
+  `weights`.
+
+### Math notation
+
+- Write matrix multiplication as `@` in prose and `\mathbin{@}` in LaTeX.
+- Write element-wise multiplication with a dot, `\cdot`.
+- Every index and subscript must be LaTeX. Never draw `d_k`, `d_model`,
+  `W_Q`, or similar as plain text.
+- Use `MathTex`, `SchematicScene.math_caption()`, `BadgeSpec(title_tex=True,
+  shape_tex=True)`, and `NodeSpec(label_tex=True)` for math labels.
+- Always state the axis of a `concat`, `reshape`, or `transpose`, for example
+  `concat(heads, dim=-1)`. Never write a bare `concat`.
+- Keep the notation legend on the left edge. This frees vertical space for
+  the graph and keeps the reading direction consistent.
+
+### Scene storyboard
+
+Every scene file has a sibling `.txt` storyboard. It describes the purpose,
+layout, animation sequence, and data without requiring the reader to parse
+the Python file. Update the storyboard whenever the visual story changes.
 
 ## Environment and commands
 
@@ -51,12 +91,13 @@ Direct Manim invocation also works:
 | --- | --- |
 | `schematics/theme.py` | Colors, fonts, sizes, spacing, log-scale helpers. |
 | `schematics/specs.py` | `NodeSpec`, `BadgeSpec`, `SkipSpec`, `SceneSpec` dataclasses. |
-| `schematics/base.py` | `SchematicScene`: background, fonts, `title()`, `caption()`. |
+| `schematics/base.py` | `SchematicScene`: background, fonts, `title()`, `caption()`, `math_caption()`. |
 | `schematics/primitives.py` | `Node`, `Badge`, `SkipConnection`, `connect()`. |
 | `schematics/layouts.py` | `vertical_pipeline()`, `Pipeline`. |
 | `schematics/hud.py` | `TensorPanel`: shape badge, log bar, legend. |
 | `schematics/signal.py` | `SignalDot`: moving marker and trail. |
-| `schematics/tensors.py` | `MatrixGrid`, `WeightBars` for tensor schematics. |
+| `schematics/tensors.py` | `MatrixGrid`, `CausalMaskGrid`, `PairMatrix`, `PairStrip`, `WeightBars` for tensor schematics. |
+| `schematics/rotation.py` | `RotationDial`: 2-D vectors rotating inside a circle. |
 | `schematics/vision.py` | `PatchGrid`: pixel-art image split into patches. |
 | `schematics/text.py` | `TokenChip`: token and token-id chips. |
 | `scenes/registry.py` | Maps CLI keys to scene classes and files. |
@@ -72,8 +113,9 @@ NodeSpec(
     label="RMSNorm",              # text inside the rectangle
     shape="(B, T, 4096)",         # shown in the HUD
     detail="pre-attention norm",  # secondary HUD line
-    color="norm",                 # key from Theme.colors
+    color="compute",              # key from Theme.colors
     elems=4096,                   # elements per token for the log bar
+    label_tex=False,              # True for MathTex labels with indices
 )
 ```
 
@@ -148,21 +190,35 @@ self.play(signal.resize(spec.elems))
 
 ### `Badge` and `BadgeSpec`
 
-Compact two-line labels for tensor shapes, useful as a top strip:
+Compact two-line labels for tensor shapes. Use the math flags for any label
+with subscripts or operators:
 
 ```python
 from schematics import Badge, BadgeSpec
 
 BADGES = [
-    BadgeSpec("input", "(B, T, 4096)", "input"),
-    BadgeSpec("scores", "(B, 32, T, T)", "score"),
+    BadgeSpec("input", "(B, T, 4096)", "activation"),
+    BadgeSpec(
+        r"Q = x \mathbin{@} W_Q",
+        r"(B, T, d_{\mathrm{model}})",
+        "compute",
+        title_tex=True,
+        shape_tex=True,
+        shape_color="activation",
+        title_highlights=((r"W_Q", "weights"),),
+    ),
 ]
 
 badges = VGroup(
-    *[Badge(spec, theme, width=2.0) for spec in BADGES]
+    *[Badge(spec, theme, width=2.4) for spec in BADGES]
 ).arrange(RIGHT, buff=0.14).move_to([0, 2.98, 0])
 self.play(LaggedStart(*[FadeIn(b) for b in badges], lag_ratio=0.08))
 ```
+
+`title_highlights` recolors selected LaTeX substrings, which is how learned
+weights such as `W_Q` stay yellow inside a purple computation block.
+`title_size` selects a named size from `Theme.sizes`; use it to make
+activation cards quieter than computation blocks.
 
 ### `MatrixGrid`
 
@@ -174,7 +230,7 @@ from schematics import MatrixGrid
 keys = MatrixGrid(
     5, 4,                          # rows, columns
     theme,
-    color_key="key",               # semantic color
+    color_key="activation",        # semantic color
     row_labels=("t1", "t2", "t3", "t4", "t5"),
     highlight_rows=(0,),           # stronger fill for selected rows
 )
@@ -182,6 +238,24 @@ keys.move_to([-3.85, 1.20, 0])
 self.play(*keys.reveal())          # row-by-row fade-in
 self.play(Indicate(keys.row(0)))   # one row as a VGroup
 ```
+
+### `CausalMaskGrid`
+
+Schematic causal mask: cells on and below the diagonal are allowed, cells
+above the diagonal are blocked. Rows are query positions `i`, columns are
+key positions `j`:
+
+```python
+from schematics import CausalMaskGrid
+
+mask = CausalMaskGrid(5, theme, cell=0.17, gap=0.03)
+mask.move_to([5.40, -0.05, 0])
+self.play(*mask.reveal())          # row by row, top to bottom
+```
+
+`mask.allowed` and `mask.blocked` group the cells by triangular region.
+`mask.row_centers` / `mask.col_centers` give the local coordinates for
+axis labels. Pair it with a piecewise formula and a two-entry legend.
 
 ### `WeightBars`
 
@@ -194,7 +268,7 @@ logits = WeightBars(
     ("t1", "t2", "t3"),
     (2.0, 1.0, 0.5),
     theme,
-    color_key="score",
+    color_key="activation",
     signed=True,           # diverging bars around a central baseline
     value_fmt="{:.2f}",
 )
@@ -203,7 +277,7 @@ weights = WeightBars(
     ("t1", "t2", "t3"),
     (0.55, 0.20, 0.12),
     theme,
-    color_key="weight",
+    color_key="activation",
     value_fmt="{:.3f}",
 )
 self.play(*weights.reveal())
@@ -211,6 +285,95 @@ self.play(*weights.reveal())
 
 Use `signed=True` for raw logits and the default unsigned mode for
 non-negative weights.
+
+### `PairStrip`
+
+Horizontal vector split into 2-D coordinate pairs, used by RoPE diagrams:
+
+```python
+from schematics import PairStrip
+
+pairs = PairStrip(
+    4,                              # d_k / 2 pairs
+    theme,
+    cell=0.30,
+    pair_gap=0.55,
+    color_key="activation",
+).shift([-2.30, 2.15, 0])
+
+self.play(FadeIn(pairs.cells))
+self.play(LaggedStart(*[Create(box) for box in pairs.boxes]))
+```
+
+The strip has `n_pairs` boxes. `pairs.cells` contains all scalar cells,
+`pairs.boxes` contains the pair outlines, and `pairs.pairs[i]` groups one
+box with its two cells. Build it at the origin and use `shift()` rather than
+`move_to()` if you want the cells to stay on a fixed row while optional pair
+labels sit above them.
+
+### `PairMatrix`
+
+Two-dimensional block of scalar cells grouped into coordinate pairs, used
+when rows are sequence positions and columns are `head_dim` coordinates:
+
+```python
+from manim import RoundedRectangle
+
+from schematics import PairMatrix
+
+head = PairMatrix(
+    16,                 # N_tokens rows
+    4,                  # d_k / 2 pairs per row
+    theme,
+    cell=0.15,
+    pair_gap=0.17,
+    color_key="activation",
+    pair_labels=(r"i=0", r"i=1", r"i=2", r"i=3"),
+).shift([-3.20, 1.55, 0])
+
+self.play(*head.reveal())
+frame = RoundedRectangle(
+    width=head.block_width + 0.10,
+    height=0.20,
+).move_to([-3.20, head.row_group(0).get_center()[1], 0])
+```
+
+`head.cells[row][pair]` stores the two cells of a pair, `head.row_group(i)`
+returns all cells of one row, and `head.row_centers` / `head.pair_centers`
+give the local coordinates of rows and pair columns. The block itself is
+centered at the origin; shift it into place. Use `head.block_width` and
+`head.block_height` for selection frames and brackets.
+
+### `RotationDial`
+
+Circle with a rotating vector, optional trail, and an optional dashed
+secondary vector:
+
+```python
+from schematics import RotationDial
+
+dial = RotationDial(
+    theme,
+    radius=0.55,
+    color_key="activation",
+).move_to([-4.10, 0.35, 0])
+
+self.play(FadeIn(dial))
+trail = dial.make_trail()
+self.add(trail)
+self.bring_to_back(trail)
+self.play(dial.rotate_to(1.5))
+```
+
+`rotate_to(angle)` returns a `Rotate` animation and updates the stored angle.
+`set_angle(angle)` rotates immediately, which is useful inside an updater
+driven by a `ValueTracker`. Add the dial itself to the scene (not only its
+parts) before attaching updaters, otherwise the updater will not run.
+`make_trail()` returns a `TracedPath` in scene coordinates; add it
+separately. The trace is drawn slightly inside the circle so it stays
+visible against the dial border. `static_trail()` returns a deterministic
+arc or full circle for the current angle, which keeps the final frame
+correct when Manim renders with `--still`.
 
 ### `connect`
 
@@ -220,6 +383,22 @@ Styled arrow between two mobjects, with automatic edge selection:
 from schematics import connect
 
 arrow = connect(keys, scores, theme, buff=0.18)
+self.play(Create(arrow))
+```
+
+### `route_arrow`
+
+Orthogonal polyline arrow for an explicit route, useful when a straight
+connector would cross another block:
+
+```python
+from schematics import route_arrow
+
+arrow = route_arrow(
+    [[1.0, 0.0, 0], [1.0, -1.0, 0], [0.0, -1.0, 0]],
+    theme,
+    color_key="activation",
+)
 self.play(Create(arrow))
 ```
 
@@ -236,12 +415,19 @@ and registers any `.ttf`/`.otf` files from `assets/fonts/`.
 Helper methods:
 
 ```python
-title = self.title("My diagram", x=0.0)
-stage = self.caption("softmax", x=-2.65, y=-1.30, color_key="weight")
+title = self.title("My diagram", x=0.0, size="title_small")
+stage = self.caption("softmax", x=-2.65, y=-1.30, color_key="compute")
+cost = self.math_caption(
+    r"O(B \cdot S^2 \cdot d_{\mathrm{model}})",
+    x=0.55,
+    y=-0.30,
+    color_key="complexity",
+)
 ```
 
 `caption()` creates a small muted label; override `color_key` or `size` when
-the label belongs to a specific stage.
+the label belongs to a specific stage. `math_caption()` is the LaTeX variant
+for shapes, dimensions, and cost formulas.
 
 ## Minimal new scene
 
@@ -257,15 +443,15 @@ from schematics import (
 )
 
 NODES = [
-    NodeSpec("Input", "(B, T, 4096)", "hidden states", "input", 4096),
-    NodeSpec("Layer", "(B, T, 4096)", "computation", "norm", 4096),
-    NodeSpec("Output", "(B, T, 4096)", "result", "residual", 4096),
+    NodeSpec("Input", "(B, T, 4096)", "hidden states", "activation", 4096),
+    NodeSpec("Layer", "(B, T, 4096)", "computation", "compute", 4096),
+    NodeSpec("Output", "(B, T, 4096)", "result", "activation", 4096),
 ]
 
 
 class MyDiagram(SchematicScene):
     def construct(self):
-        title = self.title("My diagram")
+        title = self.title("My diagram", size="title_small")
         pipeline = vertical_pipeline(NODES, self.theme, x=-0.75, top_y=3.12)
         hud = TensorPanel(self.theme, NODES, subtitle="T = 2048")
         signal = SignalDot(self.theme, pipeline.nodes[0].get_center())
@@ -303,15 +489,21 @@ Then register it:
 ## Conventions and pitfalls
 
 - Keep scene files thin. Put geometry in `theme.py` and layout helpers.
-- Use semantic color keys (`norm`, `attention`, `ffn`, `residual`, `input`),
-  never raw Manim colors inside a scene.
+- Use semantic color keys (`compute`, `activation`, `dimension`,
+  `complexity`, `weights`), never raw Manim colors inside a scene.
+- Keep the same color meaning across scenes: purple computes, green
+  activations and shapes, yellow learned weights.
+- Use `@` (`\mathbin{@}`) for matrix multiplication and `\cdot` for
+  element-wise multiplication. Never draw indices as plain text.
+- Keep the notation legend on the left edge.
+- Every scene has a sibling `.txt` storyboard; update it with the scene.
 - `TensorPanel.update()` and `SignalDot.advance_to()` return animation lists;
   pass them to `self.play(*...)`.
 - `Pipeline.residual_merge()` creates a dot at the path start. Add it to the
   scene before playing `MoveAlongPath`, then fade it out.
 - `Text.set_default(font=...)` is process-global. Set it through the theme.
-- `MathTex` uses LaTeX, not Pango. For diagrams prefer `Text`; use `MathTex`
-  only for real formulas.
+- `MathTex` uses LaTeX, not Pango. Use `Text` for plain prose and `MathTex`
+  for any label with indices, operators, or dimensions.
 - All comments and docstrings must be in English.
 
 ## Verification checklist
