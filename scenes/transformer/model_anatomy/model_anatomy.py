@@ -69,6 +69,7 @@ from scenes.transformer.model_anatomy.specs import (
     PROMPT,
     SINGLE_BLOCK,
     TITLE,
+    TOKEN_IDS,
     TOKEN_PIECES,
 )
 
@@ -82,7 +83,8 @@ IDX_Y = 0.64
 
 # Prompt flow above the embedding lookup.
 PHRASE_XY = (-5.85, 2.15, 0.0)
-CHIPS_XY = (-5.85, 1.52, 0.0)
+CHIPS_XY = (-5.85, 1.58, 0.0)
+IDS_Y = 1.16
 
 # Left section of the main row.
 LOOKUP_X = -5.85
@@ -145,6 +147,21 @@ class TransformerLLM(SchematicScene):
             ]
         ).arrange(RIGHT, buff=0.08).move_to(CHIPS_XY)
 
+        id_chips = VGroup(
+            *[
+                TokenChip(
+                    token_id,
+                    theme,
+                    color_key="muted",
+                    height=0.28,
+                    pad=0.05,
+                    mono=True,
+                    size="small",
+                )
+                for token_id in TOKEN_IDS
+            ]
+        ).arrange(RIGHT, buff=0.06).move_to([CHIPS_XY[0], IDS_Y, 0])
+
         phrase_arrow = self._arrow(
             [PHRASE_XY[0], phrase.get_bottom()[1]],
             [CHIPS_XY[0], chips.get_top()[1]],
@@ -170,7 +187,7 @@ class TransformerLLM(SchematicScene):
         lookup = VGroup(lookup_rect, lookup_formula)
 
         lookup_arrow = self._arrow(
-            [CHIPS_XY[0], chips.get_bottom()[1]],
+            [CHIPS_XY[0], id_chips.get_bottom()[1]],
             [LOOKUP_X, lookup_rect.get_top()[1]],
         )
 
@@ -271,6 +288,13 @@ class TransformerLLM(SchematicScene):
                 lag_ratio=0.12,
             ),
             run_time=0.8,
+        )
+        self.play(
+            LaggedStart(
+                *[FadeIn(chip, shift=DOWN * 0.05) for chip in id_chips],
+                lag_ratio=0.10,
+            ),
+            run_time=0.6,
         )
 
         # Tokens feed the named lookup operation.
@@ -429,7 +453,7 @@ class TransformerLLM(SchematicScene):
         # Closing summary: embeddings -> blocks -> output head.
         self.play(
             Indicate(
-                VGroup(chips, lookup, hidden_input),
+                VGroup(chips, id_chips, lookup, hidden_input),
                 color=theme.color("compute"),
                 scale_factor=1.02,
             ),

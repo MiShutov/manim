@@ -58,6 +58,7 @@ def _sizes() -> dict[str, float]:
         "caption": 15,
         "help": 14,
         "small": 13,
+        "micro": 11,
         "badge_title": 17,
         "badge_shape": 13,
         "card_title": 15,

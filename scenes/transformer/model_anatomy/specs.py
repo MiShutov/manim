@@ -19,6 +19,7 @@ from schematics.specs import BadgeSpec, NodeSpec
 TITLE = "Transformer-decoder architecture"
 PROMPT = "The cat is sleeping"
 TOKEN_PIECES = ("The", "cat", "is", "sleep", "ing")
+TOKEN_IDS = ("464", "3797", "318", "5396", "278")
 # Token whose chip and activation row are highlighted together.
 HIGHLIGHT_TOKEN = 1
 

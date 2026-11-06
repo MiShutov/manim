@@ -99,7 +99,7 @@ Direct Manim invocation also works:
 | `schematics/tensors.py` | `MatrixGrid`, `CausalMaskGrid`, `PairMatrix`, `PairStrip`, `WeightBars` for tensor schematics. |
 | `schematics/rotation.py` | `RotationDial`: 2-D vectors rotating inside a circle. |
 | `schematics/vision.py` | `PatchGrid`: pixel-art image split into patches. |
-| `schematics/text.py` | `TokenChip`: token and token-id chips. |
+| `schematics/text.py` | `TokenChip`, `CodeLine`, `SymbolStrip`, `VocabularyTable`: token chips, syntax-colored code, mergeable symbol strips, and JSON-style vocabulary grids. |
 | `scenes/registry.py` | Maps CLI keys to scene classes and files. |
 
 ## Core API
@@ -285,6 +285,92 @@ self.play(*weights.reveal())
 
 Use `signed=True` for raw logits and the default unsigned mode for
 non-negative weights.
+
+### `CodeLine`
+
+Monospace code with semantic per-segment colors, built from Pango markup:
+
+```python
+from schematics import CodeLine
+
+line = CodeLine(
+    (
+        ("ids", "muted"),
+        (" = ", None),
+        ("tokenizer.encode", "compute"),
+        ("(", "muted"),
+        ("text", "activation"),
+        (")", "muted"),
+    ),
+    theme,
+    size="small",
+)
+line.move_to([0.0, 3.10, 0])
+self.play(Write(line))
+```
+
+Use `None` for ordinary source text. Function names are purple
+(`compute`), string or variable arguments are green (`activation`), and
+punctuation is muted.
+
+### `VocabularyTable`
+
+JSON-style grid of `"token_id": "string"` cells. The table is centered at
+the origin, so move it into place after construction:
+
+```python
+from schematics import VocabularyTable
+
+table = VocabularyTable(
+    (
+        ("13", "."),
+        ("262", "the"),
+        ("278", "ing"),
+        ("318", "is"),
+        ("464", "The"),
+        ("3797", "cat"),
+    ),
+    theme,
+    columns=2,
+    cell_width=4.2,
+).move_to([0.0, -1.86, 0])
+
+self.play(LaggedStart(*table.reveal(), lag_ratio=0.05))
+self.play(table.highlight("278", active=True))
+self.play(Indicate(table.entry("278").value_label))
+```
+
+`entry(token_id)` returns one cell, and `highlight(token_id)` returns an
+animation that toggles its green selected state. Token ids are muted and
+strings are green, matching the tokenization diagrams. Use `columns=1` for a
+single-column vocabulary window; a taller table can be scrolled while rows
+near the panel edges are faded out.
+
+### `SymbolStrip`
+
+Horizontal row of symbol chips that can highlight and merge adjacent pairs,
+the core operation of byte-pair encoding. It is left-anchored, so a scene
+places it with `set_left(x, y)` and the left edge stays fixed as merges shrink
+the row:
+
+```python
+from schematics import SymbolStrip
+
+word = SymbolStrip(("\u2581", "l", "o", "w"), theme, marker="\u2581")
+word.set_left(-3.0, 2.0)
+self.play(FadeIn(word))
+
+index = word.find_pair("l", "o")
+self.play(*word.highlight_pair(index))            # flash the two chips
+self.play(FadeOut(word.chips[index]), FadeOut(word.chips[index + 1]))
+_, moves = word.merge_pair(index)                 # collapse into one chip
+self.play(*moves)
+```
+
+`merge_pair(index)` removes the two chips, inserts the merged chip, relayouts,
+and returns `(merged_chip, move_animations)` so the caller can slide the
+surviving chips into place. The optional `marker` (for example the SentencePiece
+space symbol ``\u2581``) is drawn muted instead of the strip color.
 
 ### `PairStrip`
 

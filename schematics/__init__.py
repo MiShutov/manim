@@ -20,7 +20,13 @@ from schematics.tensors import (
     PairStrip,
     WeightBars,
 )
-from schematics.text import TokenChip
+from schematics.text import (
+    CodeLine,
+    SymbolStrip,
+    TokenChip,
+    VocabEntry,
+    VocabularyTable,
+)
 from schematics.theme import DARK, Theme
 from schematics.vision import PatchGrid
 
@@ -29,6 +35,7 @@ __all__ = [
     "Badge",
     "BadgeSpec",
     "CausalMaskGrid",
+    "CodeLine",
     "MatrixGrid",
     "Node",
     "NodeSpec",
@@ -42,9 +49,12 @@ __all__ = [
     "SignalDot",
     "SkipConnection",
     "SkipSpec",
+    "SymbolStrip",
     "TensorPanel",
     "Theme",
     "TokenChip",
+    "VocabEntry",
+    "VocabularyTable",
     "WeightBars",
     "connect",
     "route_arrow",

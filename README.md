@@ -28,6 +28,7 @@ scenes/             thin scenes: data plus composition only
   transformer/positional_encoding/positional_encoding.py
   transformer/transformer_block/transformer_block.py
   transformer/model_anatomy/model_anatomy.py
+  transformer/generation_loop/generation_loop.py
   transformer/tokens/tokens.py
   math/matrix_multiplication.py
   registry.py       registry for batch rendering and tests
