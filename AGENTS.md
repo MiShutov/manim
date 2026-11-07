@@ -48,6 +48,24 @@
   diagrams), not `W`.
 - Use semantic color keys only; never hard-code a Manim color in a scene.
 
+## Diagram typography
+- Keep one title size for all blocks at the same hierarchy level. Use
+  `badge_title` for both computation blocks and activation cards.
+- Do not mix bold `Text` block titles with `MathTex` titles at the same level:
+  bold glyphs look larger and heavier than the math blocks. Prefer
+  `BadgeSpec(title_tex=True)` for activation cards too.
+- Use `title_size="card_title"` only for deliberately quieter secondary
+  cards, never for cards standing next to computation blocks.
+- Let block widths hug their content. `Badge` already adds `0.16` padding on
+  each side; avoid widths much larger than the title or shape line, because
+  the empty space makes the diagram look unbalanced.
+- When a block contains a formula, widen the block just enough to keep the
+  formula readable instead of shrinking the font to fill a fixed width.
+- Never use giant fonts to fill a block or a diagram. Keep the glyph height of
+  a block label proportional to the activation-card text next to it; if a
+  label looks bigger than the green cards, reduce the font first, then shrink
+  the block to the text. Oversized labels are a defect, not a style.
+
 ## Diagram math notation
 - Matrix multiplication: `@` in the text, and `\mathbin{@}` inside `MathTex`.
 - Element-wise multiplication: `\cdot` (a dot).

@@ -3,13 +3,16 @@
 from schematics.specs import SceneSpec
 from scenes.math.matrix_multiplication import MatrixMultiplication
 from scenes.transformer.basic_attention.basic_attention import ClassicalAttention
+from scenes.transformer.block_modifications.block_modifications import (
+    BlockModifications,
+)
 from scenes.transformer.bpe.bpe import BPE
 from scenes.transformer.generation_loop.generation_loop import GenerationLoop
+from scenes.transformer.gated_mlp.gated_mlp import GatedMLP
 from scenes.transformer.model_anatomy.model_anatomy import TransformerLLM
 from scenes.transformer.positional_encoding.positional_encoding import (
     RotaryPositionalEncoding,
 )
-from scenes.transformer.transformer_block.transformer_block import LlamaBlock
 from scenes.transformer.tokenization.tokenization import Tokenization
 from scenes.transformer.tokens.tokens import TokenAnatomy
 
@@ -46,12 +49,22 @@ SCENES: dict[str, SceneSpec] = {
         title="Transformer-decoder autoregressive generation",
         tags=("llm", "transformer", "generation", "logits"),
     ),
-    "llama_block": SceneSpec(
-        key="transformer_block",
-        path="scenes/transformer/transformer_block/transformer_block.py",
-        cls=LlamaBlock,
-        title="Llama transformer block",
-        tags=("llm", "transformer"),
+    "block_modifications": SceneSpec(
+        key="block_modifications",
+        path=(
+            "scenes/transformer/block_modifications/"
+            "block_modifications.py"
+        ),
+        cls=BlockModifications,
+        title="Transformer block and swap-in modifications",
+        tags=("llm", "transformer", "architecture", "moe", "attention"),
+    ),
+    "gated_mlp": SceneSpec(
+        key="gated_mlp",
+        path="scenes/transformer/gated_mlp/gated_mlp.py",
+        cls=GatedMLP,
+        title="Gated MLP (SwiGLU)",
+        tags=("llm", "transformer", "mlp", "swiglu", "ffn"),
     ),
     "tokens": SceneSpec(
         key="tokens",
