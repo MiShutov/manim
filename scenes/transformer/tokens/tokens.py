@@ -322,10 +322,10 @@ class TokenAnatomy(SchematicScene):
         # Final composition is centered on the screen: labels on top, matrices
         # below them, then the two token streams entering the Transformer.
         text_caption = self.caption(
-            "text tokens · N_text × d", x=-1.60, y=1.25, color_key="value"
+            "text tokens (N_text × d)", x=-1.60, y=1.25, color_key="value"
         )
         image_caption = self.caption(
-            "image tokens · N_image × d", x=1.60, y=1.25, color_key="key"
+            "image tokens (N_image × d)", x=1.60, y=1.25, color_key="key"
         )
 
         transformer = Node(
