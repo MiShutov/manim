@@ -8,6 +8,8 @@ becomes an ordinary, mergeable symbol at the start of each word.
 
 from __future__ import annotations
 
+from collections import Counter
+
 TITLE = "BPE: how a tokenizer learns subwords (SentencePiece)"
 
 # The space meta-symbol. SentencePiece rewrites spaces to this block character
@@ -15,13 +17,36 @@ TITLE = "BPE: how a tokenizer learns subwords (SentencePiece)"
 # or "o". It is what keeps the leading space attached to a word.
 SPACE = "\u2581"
 
+# The training corpus as one running text. The scene shows these lines first,
+# then folds them into the counted (word, frequency) table below. Each line
+# is short enough to fit inside the corpus panel at the "caption" font size.
+RAW_CORPUS_LINES = (
+    "low lower newest widest",
+    "newest low widest low",
+    "newest lower low newest",
+    "widest newest low newest",
+)
+RAW_CORPUS = " ".join(RAW_CORPUS_LINES)
+
+# Word order of the counted table. Frequencies come from RAW_CORPUS, so the
+# running text and the table can never disagree.
+CORPUS_WORDS = ("low", "lower", "newest", "widest")
+_CORPUS_FREQ = Counter(RAW_CORPUS.split())
+
 # Training corpus: word -> (symbols, frequency). Every word starts with the
 # space meta-symbol, exactly as SentencePiece sees it.
-CORPUS = (
-    ("\u2581low", ("\u2581", "l", "o", "w"), 5),
-    ("\u2581lower", ("\u2581", "l", "o", "w", "e", "r"), 2),
-    ("\u2581newest", ("\u2581", "n", "e", "w", "e", "s", "t"), 6),
-    ("\u2581widest", ("\u2581", "w", "i", "d", "e", "s", "t"), 3),
+CORPUS = tuple(
+    (SPACE + word, (SPACE, *word), _CORPUS_FREQ[word]) for word in CORPUS_WORDS
+)
+
+# Base vocabulary: every character that occurs in the corpus, with the space
+# marker first and the remaining symbols in alphabetical order. BPE starts
+# from this alphabet, and each merge appends exactly one token to it.
+BASE_SYMBOLS = (
+    SPACE,
+    *sorted(
+        {symbol for _, symbols, _ in CORPUS for symbol in symbols} - {SPACE}
+    ),
 )
 
 # Ordered merge rules learned by BPE: (left, right, merged, count). The order
@@ -48,6 +73,11 @@ MERGES = (
 # The first five merges are animated step by step in the corpus. The remaining
 # rules are appended as the loop "keeps going".
 ANIMATED_MERGES = 5
+
+# Rules that are drawn before the "..." continuation: the animated ones plus a
+# few appended rows. The vocabulary panel mirrors exactly these merges.
+EXTRA_MERGES = 3
+VISIBLE_MERGES = ANIMATED_MERGES + EXTRA_MERGES
 
 # Stopping condition shown when the loop finishes.
 VOCAB_TARGET = r"|V| = 32{,}000"

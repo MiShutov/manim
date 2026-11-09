@@ -1,9 +1,10 @@
 """SentencePiece: how a tokenizer learns subwords and encodes fast.
 
-The first act trains a tokenizer on a tiny corpus: symbols are repeatedly
-counted and the most frequent adjacent pair is merged, building an ordered
-list of merge rules. The second act encodes a word that was never seen in
-training by applying those rules greedily left to right.
+The first act starts from the corpus as running text, folds it into a
+word-frequency table, then repeatedly counts adjacent pairs and merges the
+most frequent one, growing the token vocabulary and building an ordered list
+of merge rules. The second act encodes a word that was never seen in training
+by applying those rules greedily left to right.
 
 Run with:
 
@@ -12,7 +13,11 @@ Run with:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from manim import (
+    ChangeDecimalToValue,
+    DecimalNumber,
     DOWN,
     FadeIn,
     FadeOut,
@@ -20,6 +25,7 @@ from manim import (
     LaggedStart,
     LEFT,
     MathTex,
+    Mobject,
     RIGHT,
     RoundedRectangle,
     Text,
@@ -31,39 +37,66 @@ from manim import (
 from schematics import CodeLine, SchematicScene, SymbolStrip, TokenChip
 from scenes.transformer.bpe.specs import (
     ANIMATED_MERGES,
+    BASE_SYMBOLS,
     CODE_ENCODE,
     CORPUS,
     MERGES,
     NEW_SYMBOLS,
     NEW_WORD,
+    RAW_CORPUS_LINES,
+    RESULT_TOKENS,
     SPACE,
     TITLE,
     TOKEN_IDS,
+    VISIBLE_MERGES,
     VOCAB_TARGET,
 )
 
 # --- Act 1 geometry ---------------------------------------------------------
 TITLE_Y = 3.70
 
-CORPUS_PANEL = (-4.55, 0.55, 0)
-CORPUS_WIDTH = 4.90
+CORPUS_PANEL = (-4.75, 0.55, 0)
+CORPUS_WIDTH = 4.35
 CORPUS_HEIGHT = 4.60
 CORPUS_HEADER_Y = 2.32
+CORPUS_SUBTITLE_Y = CORPUS_HEADER_Y - 0.30
+CORPUS_TEXT_Y = 0.70
 CORPUS_ROW_Y = (1.62, 1.00, 0.38, -0.24)
-CORPUS_STRIP_X = -6.72
-CORPUS_COUNT_X = -2.42
+CORPUS_STRIP_X = -6.73
+CORPUS_COUNT_X = -2.80
 CORPUS_LEGEND_Y = -1.46
+CORPUS_HINT_Y = -0.85
 
-RULES_PANEL = (4.55, 0.55, 0)
-RULES_WIDTH = 4.80
+VOCAB_PANEL = (0.0, 0.55, 0)
+VOCAB_WIDTH = 3.90
+VOCAB_HEIGHT = 4.60
+VOCAB_HEADER_Y = 2.32
+VOCAB_COUNT_Y = 2.02
+VOCAB_SYMBOLS_LABEL_Y = 1.66
+VOCAB_SYMBOLS_Y = 1.32
+VOCAB_MERGES_LABEL_Y = 0.95
+VOCAB_MERGES_Y = 0.58
+VOCAB_FOOTNOTE_Y = -1.48
+
+RULES_PANEL = (4.75, 0.55, 0)
+RULES_WIDTH = 4.35
 RULES_HEIGHT = 4.60
 RULES_HEADER_Y = 2.32
-RULES_STRIP_X = 2.28
+RULES_STRIP_X = 2.82
 RULES_ROW_START_Y = 1.58
 RULES_ROW_GAP = 0.40
 
-ITER_BADGE = (0.0, 1.50, 0)
-REPEAT_Y = -2.30
+# Act 2 keeps the vocabulary to the left of the rules and slides both panels
+# left as one block, freeing the right side for the encoded word. The gap
+# between them is tighter than in act 1.
+VOCAB_ACT2_X = -4.93
+VOCAB_RULES_GAP = 0.30
+RULES_ACT2_X = (
+    VOCAB_ACT2_X + VOCAB_WIDTH / 2 + VOCAB_RULES_GAP + RULES_WIDTH / 2
+)
+
+ITER_BADGE = (0.0, -2.55, 0)
+REPEAT_Y = -2.55
 
 # --- Act 2 geometry ---------------------------------------------------------
 WORD_CARD = (3.60, 2.55, 0)
@@ -78,19 +111,83 @@ class BPE(SchematicScene):
     """Train a BPE tokenizer, then encode an unseen word with its rules."""
 
     def construct(self):
-        """Build the corpus and rules panels, run the merge loop, then encode."""
+        """Build the panels, run the merge loop, then encode an unseen word."""
         theme = self.theme
         title = self.title(TITLE, x=0.0, y=TITLE_Y, size="title_small")
         if title.width > 13.0:
             title.scale_to_fit_width(13.0)
 
-        corpus_panel, strips = self._corpus_panel()
+        corpus_panel, raw_text, mode_label = self._corpus_panel()
         rules_panel = self._rules_panel()
         repeat_note = self._repeat_note()
 
         self.play(FadeIn(title, shift=DOWN * 0.15), run_time=0.6)
         self.play(FadeIn(corpus_panel, shift=RIGHT * 0.10), run_time=0.7)
+        self.play(FadeIn(raw_text, shift=UP * 0.08), run_time=0.7)
+
+        # The corpus arrives as running text. Counting it is the first step of
+        # training and turns it into the (word, frequency) table.
+        count_hint = self.caption(
+            "count how often each word occurs",
+            x=CORPUS_PANEL[0],
+            y=CORPUS_HINT_Y,
+        )
+        self.play(FadeIn(count_hint), run_time=0.4)
         self.play(FadeIn(rules_panel, shift=LEFT * 0.10), run_time=0.7)
+
+        table, counts, strips, legend = self._corpus_table()
+        mode_counted = self._corpus_mode("word : count")
+        self.play(
+            FadeOut(raw_text, shift=UP * 0.08),
+            FadeOut(count_hint),
+            FadeOut(mode_label),
+            FadeIn(mode_counted),
+            run_time=0.7,
+        )
+        # Drop the faded subtitle from the panel group; otherwise fading the
+        # whole panel out later would briefly bring it back at full opacity.
+        corpus_panel.remove(mode_label)
+        corpus_panel.add(mode_counted)
+
+        corpus_panel.add(table)
+        self.play(
+            LaggedStart(
+                *[FadeIn(row, shift=DOWN * 0.05) for row in table],
+                lag_ratio=0.12,
+            ),
+            run_time=0.8,
+        )
+        corpus_panel.add(counts)
+        self.play(
+            LaggedStart(*[FadeIn(count) for count in counts], lag_ratio=0.12),
+            run_time=0.6,
+        )
+        corpus_panel.add(legend)
+        self.play(FadeIn(legend), run_time=0.4)
+
+        # --- Vocabulary: start from the alphabet --------------------------
+        vocab_panel, base_chips, merge_chips, vocab_ellipsis, vocab_size = (
+            self._vocab_panel()
+        )
+        vocab_chips = {
+            chip.text: chip for chip in (*base_chips, *merge_chips)
+        }
+        self.play(FadeIn(vocab_panel, shift=UP * 0.10), run_time=0.6)
+        seed_note = self.caption(
+            "start: every symbol enters the vocabulary",
+            x=VOCAB_PANEL[0],
+            y=REPEAT_Y,
+        )
+        self.play(FadeIn(seed_note), run_time=0.3)
+        self.play(
+            LaggedStart(
+                *[FadeIn(chip, shift=UP * 0.05) for chip in base_chips],
+                lag_ratio=0.05,
+            ),
+            ChangeDecimalToValue(vocab_size, len(BASE_SYMBOLS)),
+            run_time=0.9,
+        )
+        self.play(FadeOut(seed_note), run_time=0.3)
 
         # --- Training: repeated count -> merge ----------------------------
         rule_rows: list[VGroup] = []
@@ -139,11 +236,27 @@ class BPE(SchematicScene):
             )
             rules_panel.add(row)
             rule_rows.append(row)
-            self.play(FadeIn(row, shift=RIGHT * 0.08), run_time=0.35)
+            new_token = merge_chips[step_idx]
+            self.play(
+                FadeIn(row, shift=RIGHT * 0.08),
+                FadeIn(new_token, shift=UP * 0.05),
+                ChangeDecimalToValue(
+                    vocab_size, len(BASE_SYMBOLS) + step
+                ),
+                run_time=0.45,
+            )
+            self.play(
+                Indicate(
+                    new_token,
+                    color=theme.color("activation"),
+                    scale_factor=1.12,
+                ),
+                run_time=0.30,
+            )
             self.play(FadeOut(badge), run_time=0.25)
 
         # The loop keeps going past the animated steps.
-        for extra_idx in range(ANIMATED_MERGES, ANIMATED_MERGES + 3):
+        for extra_idx in range(ANIMATED_MERGES, VISIBLE_MERGES):
             left, right, merged, count = MERGES[extra_idx]
             row = self._rule_row(extra_idx + 1, left, right, merged, count)
             row.move_to(
@@ -152,7 +265,14 @@ class BPE(SchematicScene):
             )
             rules_panel.add(row)
             rule_rows.append(row)
-            self.play(FadeIn(row, shift=RIGHT * 0.08), run_time=0.30)
+            self.play(
+                FadeIn(row, shift=RIGHT * 0.08),
+                FadeIn(merge_chips[extra_idx], shift=UP * 0.05),
+                ChangeDecimalToValue(
+                    vocab_size, len(BASE_SYMBOLS) + extra_idx + 1
+                ),
+                run_time=0.35,
+            )
 
         ellipsis = Text(
             "\u2026",
@@ -163,13 +283,28 @@ class BPE(SchematicScene):
             [RULES_PANEL[0], RULES_ROW_START_Y - len(rule_rows) * RULES_ROW_GAP, 0]
         )
         rules_panel.add(ellipsis)
-        self.play(FadeIn(ellipsis), FadeIn(repeat_note), run_time=0.5)
+        self.play(
+            FadeIn(ellipsis),
+            FadeIn(vocab_ellipsis),
+            FadeIn(repeat_note),
+            run_time=0.5,
+        )
 
         # --- Transition: keep the rules, drop the training scaffolding -----
+        # The vocabulary and the rules slide left as one block, keeping their
+        # order and tightening the gap between them. This frees the right
+        # side for the encoded word without a panel jumping across the screen.
+        vocab_shift = LEFT * (VOCAB_PANEL[0] - VOCAB_ACT2_X)
         self.play(
             FadeOut(corpus_panel, shift=DOWN * 0.08),
             FadeOut(repeat_note),
-            rules_panel.animate.move_to([-4.55, 0.55, 0]),
+            vocab_panel.animate.shift(vocab_shift),
+            *[
+                chip.animate.shift(vocab_shift)
+                for chip in (*base_chips, *merge_chips)
+            ],
+            vocab_ellipsis.animate.shift(vocab_shift),
+            rules_panel.animate.move_to([RULES_ACT2_X, RULES_PANEL[1], 0]),
             run_time=1.0,
         )
 
@@ -281,12 +416,27 @@ class BPE(SchematicScene):
             ),
             run_time=0.7,
         )
+        vocab_caption = self.caption(
+            "both tokens are in the vocabulary",
+            x=VOCAB_ACT2_X,
+            y=-1.02,
+            color_key="dimension",
+        )
         self.play(
             *[
                 Indicate(chip, color=theme.color("activation"), scale_factor=1.10)
                 for chip in chars.chips
             ],
-            run_time=0.6,
+            *[
+                Indicate(
+                    vocab_chips[token],
+                    color=theme.color("dimension"),
+                    scale_factor=1.15,
+                )
+                for token in RESULT_TOKENS
+            ],
+            FadeIn(vocab_caption),
+            run_time=0.7,
         )
         self.wait(2.5)
 
@@ -294,8 +444,12 @@ class BPE(SchematicScene):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _corpus_panel(self) -> tuple[VGroup, dict[str, SymbolStrip]]:
-        """Build the corpus panel and return it with a word -> strip lookup."""
+    def _corpus_panel(self) -> tuple[VGroup, VGroup, Text]:
+        """Build the corpus panel with its running-text view.
+
+        Returns the panel frame, the raw text lines, and the mode subtitle
+        that is swapped for ``word : count`` once the text is counted.
+        """
         theme = self.theme
         rect = RoundedRectangle(
             width=CORPUS_WIDTH,
@@ -308,11 +462,66 @@ class BPE(SchematicScene):
         ).move_to(CORPUS_PANEL)
 
         header = Text(
-            "corpus (word : count)",
+            "training corpus",
             font_size=theme.size("small"),
             font=theme.font,
             color=theme.color("muted"),
         ).move_to([CORPUS_PANEL[0], CORPUS_HEADER_Y, 0])
+
+        mode_label = self._corpus_mode("raw text")
+        raw_text = self._raw_corpus()
+
+        return VGroup(rect, header, mode_label), raw_text, mode_label
+
+    def _corpus_mode(self, text: str) -> Text:
+        """Return the corpus panel subtitle centered at its fixed position."""
+        theme = self.theme
+        return Text(
+            text,
+            font_size=theme.size("micro"),
+            font=theme.font,
+            color=theme.color("muted"),
+        ).move_to([CORPUS_PANEL[0], CORPUS_SUBTITLE_Y, 0])
+
+    def _raw_corpus(self) -> VGroup:
+        """Build the corpus as running text, before it is counted."""
+        theme = self.theme
+        lines = VGroup(
+            *[
+                Text(
+                    line,
+                    font_size=theme.size("caption"),
+                    font=theme.font,
+                    color=theme.color("activation"),
+                )
+                for line in RAW_CORPUS_LINES
+            ]
+        ).arrange(DOWN, buff=0.26)
+        lines.move_to([CORPUS_PANEL[0], CORPUS_TEXT_Y, 0])
+        return lines
+
+    def _corpus_table(
+        self,
+    ) -> tuple[VGroup, VGroup, dict[str, SymbolStrip], VGroup]:
+        """Build the counted corpus: symbol strips, count labels, and legend."""
+        theme = self.theme
+        table = VGroup()
+        counts = VGroup()
+        strips: dict[str, SymbolStrip] = {}
+        for (word, symbols, count), y in zip(CORPUS, CORPUS_ROW_Y):
+            strip = SymbolStrip(
+                symbols, theme, height=0.30, pad=0.08, buff=0.04, marker=SPACE
+            )
+            strip.set_left(CORPUS_STRIP_X, y)
+            count_label = Text(
+                str(count),
+                font_size=theme.size("small"),
+                font=theme.mono_font,
+                color=theme.color("muted"),
+            ).move_to([CORPUS_COUNT_X, y, 0], aligned_edge=RIGHT)
+            table.add(strip)
+            counts.add(count_label)
+            strips[word] = strip
 
         legend = VGroup(
             Text(
@@ -334,23 +543,180 @@ class BPE(SchematicScene):
         ).arrange(RIGHT, buff=0.08)
         legend.move_to([CORPUS_PANEL[0], CORPUS_LEGEND_Y, 0])
 
-        panel = VGroup(rect, header, legend)
-        strips: dict[str, SymbolStrip] = {}
-        for (word, symbols, count), y in zip(CORPUS, CORPUS_ROW_Y):
-            strip = SymbolStrip(
-                symbols, theme, height=0.30, pad=0.08, buff=0.04, marker=SPACE
-            )
-            strip.set_left(CORPUS_STRIP_X, y)
-            count_label = Text(
-                str(count),
-                font_size=theme.size("small"),
-                font=theme.mono_font,
-                color=theme.color("muted"),
-            ).move_to([CORPUS_COUNT_X, y, 0], aligned_edge=LEFT)
-            panel.add(strip, count_label)
-            strips[word] = strip
+        return table, counts, strips, legend
 
-        return panel, strips
+    def _vocab_panel(
+        self,
+    ) -> tuple[VGroup, list[TokenChip], list[TokenChip], Text, DecimalNumber]:
+        """Build the vocabulary panel with every token slot pre-placed.
+
+        The panel starts empty. The caller reveals the base-symbol chips
+        first and then one chip from ``merge_chips`` per merge rule. Because
+        all chips are positioned up front, revealing one never reflows the
+        tokens that are already visible.
+
+        Returns:
+            The static panel, the base-symbol chips, the merged-token chips,
+            the trailing ellipsis, and the live ``|V|`` number.
+        """
+        theme = self.theme
+        rect = RoundedRectangle(
+            width=VOCAB_WIDTH,
+            height=VOCAB_HEIGHT,
+            corner_radius=theme.panel_radius,
+            stroke_color=theme.color("border"),
+            stroke_width=theme.panel_stroke,
+            fill_color=theme.color("panel"),
+            fill_opacity=1.0,
+        ).move_to(VOCAB_PANEL)
+        header = Text(
+            "token vocabulary",
+            font_size=theme.size("small"),
+            font=theme.font,
+            color=theme.color("muted"),
+        ).move_to([VOCAB_PANEL[0], VOCAB_HEADER_Y, 0])
+        counter, count = self._vocab_counter()
+
+        content_left = VOCAB_PANEL[0] - VOCAB_WIDTH / 2 + 0.22
+        content_width = VOCAB_WIDTH - 0.44
+        label_kwargs = {
+            "font_size": theme.size("micro"),
+            "font": theme.font,
+            "color": theme.color("muted"),
+        }
+        symbols_label = Text("base symbols", **label_kwargs).move_to(
+            [content_left, VOCAB_SYMBOLS_LABEL_Y, 0], aligned_edge=LEFT
+        )
+        merges_label = Text("from merges", **label_kwargs).move_to(
+            [content_left, VOCAB_MERGES_LABEL_Y, 0], aligned_edge=LEFT
+        )
+        footnote = Text(
+            "each merge appends one token",
+            font_size=theme.size("micro"),
+            font=theme.font,
+            color=theme.color("muted"),
+        ).move_to([VOCAB_PANEL[0], VOCAB_FOOTNOTE_Y, 0])
+
+        base_chips = [
+            TokenChip(
+                symbol,
+                theme,
+                color_key="muted" if symbol == SPACE else "activation",
+                height=0.30,
+                pad=0.07,
+                size="small",
+                mono=True,
+                valign="bottom" if symbol == SPACE else "center",
+            )
+            for symbol in BASE_SYMBOLS
+        ]
+        merge_chips = [
+            TokenChip(
+                merged,
+                theme,
+                color_key="activation",
+                height=0.30,
+                pad=0.07,
+                size="small",
+                mono=True,
+            )
+            for _, _, merged, _ in MERGES[:VISIBLE_MERGES]
+        ]
+
+        self._flow_grid(
+            base_chips,
+            left_x=content_left,
+            top_y=VOCAB_SYMBOLS_Y,
+            max_width=content_width,
+        )
+        merge_rows = self._flow_grid(
+            merge_chips,
+            left_x=content_left,
+            top_y=VOCAB_MERGES_Y,
+            max_width=content_width,
+        )
+
+        ellipsis = Text(
+            "\u2026",
+            font_size=theme.size("small"),
+            font=theme.mono_font,
+            color=theme.color("muted"),
+        ).next_to(merge_rows[-1], RIGHT, buff=0.14)
+
+        panel = VGroup(
+            rect, header, counter, symbols_label, merges_label, footnote
+        )
+        return panel, base_chips, merge_chips, ellipsis, count
+
+    def _vocab_counter(self) -> tuple[VGroup, DecimalNumber]:
+        """Return the ``|V| = n`` label and the animatable number inside it."""
+        theme = self.theme
+        prefix = MathTex(
+            r"|V| =",
+            font_size=theme.size("small"),
+            color=theme.color("dimension"),
+        )
+        number = DecimalNumber(
+            0,
+            num_decimal_places=0,
+            font_size=theme.size("small"),
+            color=theme.color("dimension"),
+        )
+        counter = VGroup(prefix, number).arrange(RIGHT, buff=0.08)
+        counter.move_to([VOCAB_PANEL[0], VOCAB_COUNT_Y, 0])
+        return counter, number
+
+    def _flow_grid(
+        self,
+        chips: Sequence[Mobject],
+        *,
+        left_x: float,
+        top_y: float,
+        max_width: float,
+        gap: float = 0.09,
+        row_gap: float = 0.16,
+    ) -> list[VGroup]:
+        """Place chips in left-aligned rows that wrap at ``max_width``.
+
+        The first pass wraps greedily. If that yields several rows, a second
+        pass uses the average row width so the last row does not end with a
+        single lone chip.
+        """
+
+        def wrap(width: float) -> list[list[Mobject]]:
+            """Greedily split the chips into rows of at most ``width``."""
+            rows: list[list[Mobject]] = []
+            current: list[Mobject] = []
+            used = 0.0
+            for chip in chips:
+                extra = chip.width + (gap if current else 0.0)
+                if current and used + extra > width:
+                    rows.append(current)
+                    current = [chip]
+                    used = chip.width
+                else:
+                    current.append(chip)
+                    used += extra
+            if current:
+                rows.append(current)
+            return rows
+
+        rows = wrap(max_width)
+        if len(rows) > 1:
+            total = sum(chip.width for chip in chips) + gap * (len(chips) - 1)
+            balanced = wrap(total / len(rows) + 0.20)
+            if len(balanced) == len(rows):
+                rows = balanced
+
+        groups = []
+        for row_idx, row in enumerate(rows):
+            group = VGroup(*row).arrange(RIGHT, buff=gap)
+            group.move_to(
+                [left_x, top_y - row_idx * (group.height + row_gap), 0],
+                aligned_edge=LEFT,
+            )
+            groups.append(group)
+        return groups
 
     def _rules_panel(self) -> VGroup:
         """Return the (initially empty) merge-rules panel."""

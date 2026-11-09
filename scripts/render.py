@@ -41,9 +41,23 @@ def main() -> None:
             print(f"{key:24} {spec.path}::{spec.cls.__name__}  [{tags}]")
         return
 
-    keys = sorted(SCENES) if args.scene == "all" else [args.scene]
+    # Covers are exported on demand by scripts/thumbnails.py; they stay out of
+    # batch renders so a normal "render everything" run does not touch them.
+    if args.scene == "all":
+        keys = sorted(
+            key
+            for key, spec in SCENES.items()
+            if "thumbnail" not in spec.tags
+        )
+    else:
+        keys = [args.scene]
     if keys[0] not in SCENES:
         parser.error(f"unknown scene {keys[0]!r}; use --list")
+    if "thumbnail" in SCENES[keys[0]].tags:
+        print(
+            f"note: {keys[0]} is a cover; "
+            "scripts/thumbnails.py exports it to media/videos/"
+        )
 
     env = os.environ.copy()
     prefix = str(ROOT)

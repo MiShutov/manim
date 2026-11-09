@@ -7,6 +7,7 @@ from scenes.transformer.block_modifications.block_modifications import (
     BlockModifications,
 )
 from scenes.transformer.bpe.bpe import BPE
+from scenes.transformer.bpe.bpe_thumbnail import BPEThumbnail
 from scenes.transformer.generation_loop.generation_loop import GenerationLoop
 from scenes.transformer.gated_mlp.gated_mlp import GatedMLP
 from scenes.transformer.model_anatomy.model_anatomy import TransformerLLM
@@ -86,6 +87,13 @@ SCENES: dict[str, SceneSpec] = {
         cls=BPE,
         title="BPE: how a tokenizer learns subwords (SentencePiece)",
         tags=("llm", "transformer", "tokenization", "bpe", "sentencepiece"),
+    ),
+    "bpe_thumbnail": SceneSpec(
+        key="bpe",
+        path="scenes/transformer/bpe/bpe_thumbnail.py",
+        cls=BPEThumbnail,
+        title="BPE video thumbnail",
+        tags=("thumbnail", "bpe", "youtube"),
     ),
     "matrix_multiplication": SceneSpec(
         key="matrix_multiplication",

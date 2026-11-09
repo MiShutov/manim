@@ -1,5 +1,7 @@
 .vscode
 media
+audio
+models
 __pycache__
 .pytest_cache
 *.egg-info

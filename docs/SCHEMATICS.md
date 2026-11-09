@@ -93,6 +93,7 @@ python scripts/render.py --list                 # registered scenes
 python scripts/render.py llama_block -q l       # one scene
 python scripts/render.py all -q h               # all scenes, 1080p
 python scripts/render.py llama_block --still    # last frame only
+python scripts/thumbnails.py bpe                # cover -> media/videos/bpe/
 pytest -q                                       # smoke tests
 ```
 
@@ -533,6 +534,13 @@ cost = self.math_caption(
 the label belongs to a specific stage. `math_caption()` is the LaTeX variant
 for shapes, dimensions, and cost formulas.
 
+## Video covers
+
+Covers are separate scenes tagged `thumbnail` in the registry; they are not
+diagrams. Their composition, type scale, and export rules live in
+`docs/THUMBNAILS.md`. Export with `python scripts/thumbnails.py <video_key>`;
+the 1280x720 image is written to `media/videos/<video_key>/thumbnail.png`.
+
 ## Minimal new scene
 
 ```python
@@ -613,5 +621,6 @@ Then register it:
 ## Verification checklist
 
 1. `python scripts/render.py <key> --still` - catches layout errors quickly.
-2. `pytest -q` - renders every registered scene's last frame.
+2. `pytest -q` - renders every registered diagram scene's last frame.
+   Covers (`thumbnail` tag) are excluded by design; see `docs/THUMBNAILS.md`.
 3. Full render for animation timing: `python scripts/render.py <key> -q l`.

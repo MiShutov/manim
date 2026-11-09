@@ -15,8 +15,14 @@ if str(ROOT) not in sys.path:
 
 from scenes import SCENES  # noqa: E402
 
+# Covers are generated only on explicit request (``scripts/thumbnails.py``),
+# never as a side effect of the regular smoke run.
+DIAGRAM_KEYS = sorted(
+    key for key, spec in SCENES.items() if "thumbnail" not in spec.tags
+)
 
-@pytest.mark.parametrize("key", sorted(SCENES))
+
+@pytest.mark.parametrize("key", DIAGRAM_KEYS)
 def test_scene_renders_last_frame(key: str, tmp_path: Path) -> None:
     """Render a scene with ``-s -ql`` and fail on a non-zero exit code."""
     spec = SCENES[key]

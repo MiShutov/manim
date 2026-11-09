@@ -26,6 +26,9 @@
 
 ## Diagrams
 - Read `docs/SCHEMATICS.md` before creating or changing a diagram.
+- Read `docs/THUMBNAILS.md` before creating or changing a video cover.
+- Generate covers only on explicit request. Never rebuild them as part of
+  tests, batch renders, or unrelated work.
 - Use `scenes/transformer/transformer_block/transformer_block.py` as the pipeline reference.
 - Use `scenes/transformer/basic_attention/basic_attention.py` as the computation-graph reference.
 - Use `scenes/transformer/tokens/tokens.py` as the multimodal reference.
@@ -81,4 +84,5 @@
 - Manim environment: `~/Utils/miniconda3/envs/manim/bin/python`.
 - List scenes: `python scripts/render.py --list`.
 - Render one scene: `python scripts/render.py <key> -q l`.
+- Export a video cover: `python scripts/thumbnails.py <video_key>`.
 - Smoke tests: `pytest -q`.
