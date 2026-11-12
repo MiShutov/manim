@@ -1,0 +1,5 @@
+# Runtime dependencies for the Russian TTS pipeline.
+# Install into the conda environment used by run_tts.sh (CONDA_ENV=f5tts):
+#   pip install -r requirements.txt
+f5-tts==1.1.22
+silero-stress>=1.5

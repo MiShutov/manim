@@ -16,8 +16,8 @@ from transformers import (
     AutoModelForTokenClassification,
 )
 
-ASR_MODEL = "models/Qwen3-ASR-1.7B-hf"
-ALIGN_MODEL = "models/Qwen3-ForcedAligner-0.6B-hf"
+ASR_MODEL = "/home/msst/repo/manim/models/Qwen3-ASR-1.7B-hf"
+ALIGN_MODEL = "/home/msst/repo/manim/models/Qwen3-ForcedAligner-0.6B-hf"
 
 # Speech models consume 16 kHz mono audio, so convert to that format.
 MP3_SAMPLE_RATE = 16000
