@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Russian text-to-speech with the F5-TTS v4_winter finetune.
+# Russian text-to-speech with VoxCPM2 (OpenBMB).
 #
 # Code lives in text2speech/, media lives in audio/text2speech/.
-# Each voice is a folder in ref_voices/ with ref.wav and ref.txt.
+# Each voice is a folder with ref.wav and ref.txt under ref_voices/.
 
 CODE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AUDIO_DIR="${AUDIO_DIR:-$(cd "$CODE_DIR/.." && pwd)/audio/text2speech}"
-VOICES_DIR="$AUDIO_DIR/ref_voices"
+REPO_ROOT="$(cd "$CODE_DIR/.." && pwd)"
+AUDIO_DIR="${AUDIO_DIR:-$REPO_ROOT/audio/text2speech}"
+VOICES_DIR="${VOICES_DIR:-$AUDIO_DIR/ref_voices}"
 
 usage() {
     cat <<'EOF'
@@ -22,15 +23,20 @@ Options:
 
 Environment:
   AUDIO_DIR       media root, default <repo>/audio/text2speech
-  CONDA_ENV       conda environment with f5-tts, default f5tts
-  DEVICE          cuda or cpu, default cuda
-  AUTO_STRESS     1 to add "+" stress marks, 0 to keep the text as is
+  VOICES_DIR      voice library, default <AUDIO_DIR>/ref_voices
+  CONDA_ENV       conda environment with voxcpm, default voxcpm
+  DEVICE          auto, cuda, cuda:N, mps or cpu; default auto
   OUTPUT_FILE     output file name inside output/<text>/, default <voice>.wav
-  NFE_STEP        diffusion steps, default 32
-  CFG_STRENGTH    guidance strength, default 2.0
-  SPEED           speech rate, default 1.0
-  SWAY, FIX_DURATION, TARGET_RMS, REMOVE_SILENCE, SEED
-                  optional extras, passed to the driver when set
+  TIMESTEPS       diffusion steps, default 10
+  CFG_VALUE       guidance strength, default 2.0
+  CHUNK_CHARS     characters per model call, default 300
+  JOIN_FADE       fade between chunks in seconds, default 0.02
+  STRESS          strip (default), keep or accent; see README, "Ударения"
+  CONTROL         style instruction, e.g. "sad, slow" (see README, "Эмоции")
+  KEEP_STRESS     1 is a legacy alias for STRESS=keep
+  NORMALIZE       1 to expand numbers and dates before synthesis
+  DENOISE         1 to denoise the reference audio before cloning
+  SEED            base seed for reproducible generation
 EOF
 }
 
@@ -79,8 +85,8 @@ while (($#)); do
     esac
 done
 
-# Conda environment that has f5-tts installed.
-CONDA_ENV="${CONDA_ENV:-f5tts}"
+# Conda environment that has voxcpm installed.
+CONDA_ENV="${CONDA_ENV:-voxcpm}"
 CONDA_SH="${CONDA_SH:-$HOME/Utils/miniconda3/etc/profile.d/conda.sh}"
 
 if [[ "${CONDA_DEFAULT_ENV:-}" != "$CONDA_ENV" ]]; then
@@ -96,20 +102,15 @@ else
     echo "Conda environment already active: $CONDA_ENV"
 fi
 
-# Use the interpreters from the activated environment unless overridden.
 PYTHON="${PYTHON:-$(command -v python)}"
-
 if [[ -z "$PYTHON" ]]; then
     echo "ERROR: python not found in '$CONDA_ENV'." >&2
     exit 1
 fi
 
-MODEL_DIR="${MODEL_DIR:-$(cd "$CODE_DIR/.." && pwd)/models/F5TTS_v1_Base_v4_winter}"
-MODEL_CFG="$MODEL_DIR/model_cfg.yaml"
-CHECKPOINT="$MODEL_DIR/model_212000.safetensors"
-VOCAB="$MODEL_DIR/vocab.txt"
+MODEL_DIR="${MODEL_DIR:-$REPO_ROOT/models/VoxCPM2}"
 
-# Default voice: the first available folder, so a single voice needs no flags.
+# Default voice: winter if present, otherwise the only available folder.
 if [[ -z "$VOICE" ]]; then
     if [[ -d "$VOICES_DIR/winter" ]]; then
         VOICE="winter"
@@ -131,25 +132,35 @@ REF_TEXT_FILE="$VOICE_DIR/ref.txt"
 INPUT_TEXT="${TEXT_FILE:-$AUDIO_DIR/input_text.txt}"
 INPUT_TEXT="$(realpath "$INPUT_TEXT")"
 
-VOCODER_DIR="${VOCODER_DIR:-$(cd "$CODE_DIR/.." && pwd)/models/vocos-mel-24khz}"
-
 OUTPUT_DIR="$AUDIO_DIR/output/$(basename "${INPUT_TEXT%.*}")"
 OUTPUT_FILE="${OUTPUT_FILE:-${VOICE}.wav}"
-GEN_TEXT_FILE="$OUTPUT_DIR/${VOICE}.stressed.txt"
+GEN_TEXT_FILE="$OUTPUT_DIR/${VOICE}.prepared.txt"
 
-DEVICE="${DEVICE:-cuda}"
-AUTO_STRESS="${AUTO_STRESS:-1}"
-NFE_STEP="${NFE_STEP:-32}"
-CFG_STRENGTH="${CFG_STRENGTH:-2.0}"
-SPEED="${SPEED:-1.0}"
+DEVICE="${DEVICE:-auto}"
+CHUNK_CHARS="${CHUNK_CHARS:-300}"
+JOIN_FADE="${JOIN_FADE:-0.02}"
+TIMESTEPS="${TIMESTEPS:-10}"
+CFG_VALUE="${CFG_VALUE:-2.0}"
 
-# Optional knobs: only passed to the driver when set.
+# Stress handling: "strip" removes legacy "+" marks, "keep" passes them to the
+# model (it will say "plus"), "accent" turns them into combining acute accents.
+STRESS_MODE="${STRESS:-strip}"
+if [[ "${KEEP_STRESS:-}" == "1" ]]; then
+    STRESS_MODE="keep"
+fi
+case "$STRESS_MODE" in
+    strip|keep|accent) ;;
+    *)
+        echo "ERROR: STRESS must be strip, keep or accent (got '$STRESS_MODE')" >&2
+        exit 2
+        ;;
+esac
+
 EXTRA_ARGS=()
-[[ -n "${SWAY:-}" ]] && EXTRA_ARGS+=(--sway "$SWAY")
-[[ -n "${FIX_DURATION:-}" ]] && EXTRA_ARGS+=(--fix-duration "$FIX_DURATION")
-[[ -n "${TARGET_RMS:-}" ]] && EXTRA_ARGS+=(--target-rms "$TARGET_RMS")
-[[ -n "${REMOVE_SILENCE:-}" ]] && EXTRA_ARGS+=(--remove-silence)
 [[ -n "${SEED:-}" ]] && EXTRA_ARGS+=(--seed "$SEED")
+[[ -n "${NORMALIZE:-}" ]] && EXTRA_ARGS+=(--normalize)
+[[ -n "${DENOISE:-}" ]] && EXTRA_ARGS+=(--denoise)
+[[ -n "${CONTROL:-}" ]] && EXTRA_ARGS+=(--control "$CONTROL")
 
 if [[ ! -d "$VOICE_DIR" ]]; then
     echo "ERROR: voice folder not found: $VOICE_DIR" >&2
@@ -157,67 +168,80 @@ if [[ ! -d "$VOICE_DIR" ]]; then
     exit 1
 fi
 
-for file in "$PYTHON" "$MODEL_CFG" "$CHECKPOINT" "$VOCAB" \
-            "$REF_AUDIO" "$REF_TEXT_FILE" "$INPUT_TEXT"; do
+for file in "$PYTHON" "$REF_AUDIO" "$INPUT_TEXT"; do
     if [[ ! -f "$file" ]]; then
         echo "ERROR: file not found: $file" >&2
         exit 1
     fi
 done
 
-if [[ ! -s "$REF_TEXT_FILE" ]]; then
-    echo "ERROR: reference transcript is empty: $REF_TEXT_FILE" >&2
-    exit 1
+REF_ARGS=()
+if [[ -f "$REF_TEXT_FILE" ]]; then
+    REF_ARGS+=(--ref-text "$REF_TEXT_FILE")
+else
+    echo "WARNING: $REF_TEXT_FILE is missing; cloning the timbre only." >&2
+    echo "         Add the reference transcript for hi-fi cloning." >&2
 fi
 
-if [[ ! -f "$VOCODER_DIR/pytorch_model.bin" ]]; then
-    echo "ERROR: local vocoder not found: $VOCODER_DIR" >&2
-    echo "Download it once into models/vocos-mel-24khz (see README)." >&2
+if [[ ! -f "$MODEL_DIR/config.json" ]]; then
+    echo "ERROR: local VoxCPM2 checkpoint not found: $MODEL_DIR" >&2
+    echo "Download it once (see README) into models/VoxCPM2." >&2
     exit 1
 fi
 
 REF_LENGTH="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$REF_AUDIO")"
-if awk "BEGIN{exit !($REF_LENGTH > 12)}"; then
-    echo "WARNING: reference is ${REF_LENGTH}s, the model was trained on 8-12s" >&2
-    echo "         prompts; generation may be slower and less stable." >&2
+if awk "BEGIN{exit !($REF_LENGTH < 5)}"; then
+    echo "WARNING: reference is ${REF_LENGTH}s, VoxCPM2 clones better from 5-30 s" >&2
 fi
 
 mkdir -p "$OUTPUT_DIR"
 
-if [[ "$AUTO_STRESS" == "1" ]]; then
-    # Adds "+" before stressed vowels, keeping manual marks untouched.
-    "$PYTHON" "$CODE_DIR/add_stress.py" "$INPUT_TEXT" "$GEN_TEXT_FILE"
-else
-    "$PYTHON" - "$INPUT_TEXT" "$GEN_TEXT_FILE" <<'PY'
+"$PYTHON" - "$INPUT_TEXT" "$GEN_TEXT_FILE" "$STRESS_MODE" <<'PY'
 import re
 import sys
 
-source, target = sys.argv[1:3]
+VOWELS = "аеёиоуыэюяАЕЁИОУЫЭЮЯ"
+
+source, target, mode = sys.argv[1:4]
 text = re.sub(r"\s+", " ", open(source, encoding="utf-8").read()).strip()
 if not text:
     sys.exit("ERROR: input text is empty")
+
+marked = 0
+if mode == "accent":
+    # VoxCPM2 has no phoneme input, but the tokenizer keeps combining marks,
+    # so an F5-style "+" marker is moved behind the stressed vowel as U+0301.
+    text, marked = re.subn(
+        r"[+]([" + VOWELS + "])", lambda m: m.group(1) + "\u0301", text
+    )
+elif mode == "keep":
+    pass
+else:
+    # Plain text model: "+" would be pronounced as the word "plus".
+    text = re.sub(r"[+](?=[" + VOWELS + "])", "", text)
+
 open(target, "w", encoding="utf-8").write(text + "\n")
-print(f"Text ({len(text)} chars, stress marks kept as is): {text[:80]}...")
+if mode == "accent":
+    print(f"Text ({len(text)} chars, {marked} stress marks): {text[:80]}...")
+else:
+    print(f"Text ({len(text)} chars): {text[:80]}...")
 PY
-fi
 
 echo "Voice:    $VOICE ($REF_LENGTH s)"
-echo "Model:    $CHECKPOINT"
+echo "Model:    $MODEL_DIR"
 echo "Output:   $OUTPUT_DIR/$OUTPUT_FILE"
 
 "$PYTHON" "$CODE_DIR/synthesize.py" \
     --ref-audio "$REF_AUDIO" \
-    --ref-text "$REF_TEXT_FILE" \
+    "${REF_ARGS[@]}" \
     --gen-file "$GEN_TEXT_FILE" \
     --out "$OUTPUT_DIR/$OUTPUT_FILE" \
-    --model-cfg "$MODEL_CFG" \
-    --ckpt "$CHECKPOINT" \
-    --vocab "$VOCAB" \
-    --vocoder-dir "$VOCODER_DIR" \
+    --model-dir "$MODEL_DIR" \
     --device "$DEVICE" \
-    --nfe-step "$NFE_STEP" \
-    --cfg-strength "$CFG_STRENGTH" \
-    --speed "$SPEED" \
+    --chunk-chars "$CHUNK_CHARS" \
+    --join-fade "$JOIN_FADE" \
+    --timesteps "$TIMESTEPS" \
+    --cfg-value "$CFG_VALUE" \
     "${EXTRA_ARGS[@]}"
 
 echo

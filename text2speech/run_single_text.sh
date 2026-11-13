@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Synthesize one text file with a chosen voice.
+# Synthesize one text file with a chosen voice (VoxCPM2).
 # Usage: run_single_text.sh TEXT_FILE VOICE
 # Output: audio/text2speech/output/<text_file_stem>/<voice>.wav
 

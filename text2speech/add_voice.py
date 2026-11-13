@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Create a voice folder from any audio or video file.
 
-F5-TTS clones the voice of a short reference clip (8-12 s is the sweet spot)
-together with its exact transcript. This helper turns an arbitrary file into
-the layout ``run_tts.sh`` expects:
+VoxCPM2 clones the voice of a short reference clip (5-12 s is the sweet spot)
+together with its exact transcript, which enables hi-fi cloning. This helper
+turns an arbitrary file into the layout ``run_tts.sh`` expects:
 
     ref_voices/<name>/ref.wav   24 kHz mono PCM
     ref_voices/<name>/ref.txt   exact transcript of ref.wav
@@ -111,7 +111,7 @@ def main() -> None:
     parser.add_argument(
         "--asr-python",
         default=None,
-        help="interpreter with transformers and torch, default is the f5tts env",
+        help="interpreter with transformers and torch, default is the voxcpm env",
     )
     parser.add_argument(
         "--max-seconds",

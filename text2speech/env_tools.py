@@ -12,7 +12,7 @@ import os
 import sys
 from pathlib import Path
 
-DEFAULT_ENV_NAME = "f5tts"
+DEFAULT_ENV_NAME = "voxcpm"
 
 
 def conda_python() -> str:
